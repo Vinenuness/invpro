@@ -1,0 +1,69 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Empresas - Painel</title><style>body{font-family:Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:20px}
+h1{margin:0}
+.top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.left{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+input,select,textarea{padding:10px 12px;border-radius:10px;border:1px solid #334155;background:#0b1220;color:#e2e8f0;outline:none}
+textarea{min-height:80px;resize:vertical}
+.btn{border:1px solid #334155;background:#0b1220;color:#e2e8f0;padding:8px 10px;border-radius:10px;cursor:pointer;font-size:12px}
+.btn:hover{background:#0f1a2e}
+.btn-primary{background:#2563eb;border-color:#2563eb}
+.btn-primary:hover{background:#1d4ed8}
+.btn-danger{border-color:#ef4444;color:#ef4444}
+.btn-danger:hover{background:#ef4444;color:#fff}
+a{color:#e2e8f0;text-decoration:none}
+.small{font-size:12px;color:#94a3b8}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+.card{background:#1e293b;border:1px solid #334155;border-radius:14px;padding:14px}
+.card:hover{transform:translateY(-2px);background:#22324a;transition:all .2s}
+.row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.title{font-weight:800;color:#fff;font-size:16px}
+.muted{color:#94a3b8;font-size:13px;margin-top:4px;line-height:1.35}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:20px;z-index:100}
+.modalBox{width:100%;max-width:520px;background:#111b33;border:1px solid #334155;border-radius:16px;padding:24px 28px}
+.modalTitle{font-weight:800;margin:0 0 18px 0;font-size:20px;color:#fff}
+.modalActions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid #1e293b}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;margin-bottom:6px;font-size:13px;color:#94a3b8;font-weight:500}
+.form-group input,.form-group textarea{width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;border:1px solid #334155;background:#0b1220;color:#e2e8f0;font-size:14px}
+.form-group input:focus,.form-group textarea:focus{border-color:#2563eb;outline:none}</style></head><body><div class=top><div class=left><a href=/>&#8592; Voltar</a><h1>Empresas</h1><div class=small id=count></div></div>
+<button class="btn btn-primary" onclick="openCreateModal()">+ Nova Empresa</button></div>
+<div id=grid class=grid></div>
+<div id=modal class=modal onclick="hideModal()"><div class=modalBox onclick="event.stopPropagation()">
+<h3 class=modalTitle id=modalTitle>Nova Empresa</h3>
+<div class=form-group><label>Nome *</label><input id=tenantName placeholder="Ex: Hospital Sao Lucas" /></div>
+<div class=form-group><label>Slug (URL) *</label><input id=tenantSlug placeholder="Ex: hospital-sao-lucas" /></div>
+<div class=form-group><label>Descricao</label><textarea id=tenantDesc placeholder="Descricao da empresa..."></textarea></div>
+<div class=modalActions><button class=btn onclick="hideModal()">Cancelar</button><button class="btn btn-primary" onclick="saveTenant()">Salvar</button></div>
+</div></div><script>var tenants=[],editingId=null;
+async function load(){var r=await fetch("/api/tenants");tenants=await r.json();render();}
+function render(){
+  var g=document.getElementById("grid");g.innerHTML="";
+  document.getElementById("count").innerText=tenants.length+" empresas";
+  if(!tenants.length){var m=document.createElement("div");m.className="muted";m.textContent="Nenhuma empresa cadastrada.";g.appendChild(m);return;}
+  for(var i=0;i<tenants.length;i++){
+    var t=tenants[i];var card=document.createElement("div");card.className="card";
+    var row=document.createElement("div");row.className="row";
+    var left=document.createElement("div");
+    var title=document.createElement("div");title.className="title";title.textContent=t.name;left.appendChild(title);
+    var slug=document.createElement("div");slug.className="muted";slug.textContent="Slug: "+t.slug;left.appendChild(slug);
+    if(t.description){var desc=document.createElement("div");desc.className="muted";desc.textContent=t.description;left.appendChild(desc);}
+    row.appendChild(left);
+    var right=document.createElement("div");right.style.cssText="display:flex;gap:6px";
+    var eb=document.createElement("button");eb.className="btn";eb.textContent="Editar";(function(x){eb.onclick=function(){openEditModal(x);};})(i);right.appendChild(eb);
+    if(t.tenant_id!=1){var db=document.createElement("button");db.className="btn btn-danger";db.textContent="Excluir";(function(id){db.onclick=function(){deleteTenant(id);};})(t.tenant_id);right.appendChild(db);}
+    row.appendChild(right);card.appendChild(row);g.appendChild(card);
+  }
+}
+function openCreateModal(){editingId=null;document.getElementById("modalTitle").innerText="Nova Empresa";document.getElementById("tenantName").value="";document.getElementById("tenantSlug").value="";document.getElementById("tenantDesc").value="";document.getElementById("modal").style.display="flex";}
+function openEditModal(idx){var t=tenants[idx];editingId=t.tenant_id;document.getElementById("modalTitle").innerText="Editar Empresa";document.getElementById("tenantName").value=t.name;document.getElementById("tenantSlug").value=t.slug;document.getElementById("tenantDesc").value=t.description||"";document.getElementById("modal").style.display="flex";}
+function hideModal(){document.getElementById("modal").style.display="none";}
+async function saveTenant(){
+  var n=document.getElementById("tenantName").value.trim();var s=document.getElementById("tenantSlug").value.trim();var d=document.getElementById("tenantDesc").value.trim();
+  if(!n||!s){alert("Nome e slug sao obrigatorios");return;}
+  var url="/api/tenants";if(editingId)url+="/"+editingId;
+  var r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,slug:s,description:d})});
+  if(!r.ok){var e=await r.json();alert(e.error||"Erro");return;}
+  hideModal();await load();
+}
+async function deleteTenant(id){if(!confirm("Excluir empresa?"))return;await fetch("/api/tenants/"+id,{method:"DELETE"});await load();}
+load();</script></body></html>

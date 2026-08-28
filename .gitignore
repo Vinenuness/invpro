@@ -1,0 +1,41 @@
+# Virtual environments
+templates/.venv/
+venv/
+.venv/
+
+# Database backups
+templates/backups/
+*.sqlite3
+
+# Logs
+*.log
+.freebuff/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+Thumbs.db
+Desktop.ini
+
+# Build artifacts
+dist/
+build/
+*.spec
+
+# Temporary files
+*.json
+check.js
+decode.py
+templates/db.sqlite3-shm
+templates/db.sqlite3-wal

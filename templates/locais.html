@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8" />
+<title>Locais - Painel</title>
+<style>
+body{font-family:Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:20px}
+h1{margin:0}
+.top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.left{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+input,select,textarea{padding:10px 12px;border-radius:10px;border:1px solid #334155;background:#0b1220;color:#e2e8f0;outline:none}
+textarea{min-height:80px;resize:vertical}
+.btn{border:1px solid #334155;background:#0b1220;color:#e2e8f0;padding:8px 10px;border-radius:10px;cursor:pointer;font-size:12px}
+.btn:hover{background:#0f1a2e}
+.btn-primary{background:#2563eb;border-color:#2563eb}
+.btn-primary:hover{background:#1d4ed8}
+.btn-danger{border-color:#ef4444;color:#ef4444}
+.btn-danger:hover{background:#ef4444;color:#fff}
+a{color:#e2e8f0;text-decoration:none}
+.small{font-size:12px;color:#94a3b8}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+.card{background:#1e293b;border:1px solid #334155;border-radius:14px;padding:14px}
+.card:hover{transform:translateY(-2px);background:#22324a;transition:all .2s}
+.row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.title{font-weight:800;color:#fff;font-size:16px}
+.muted{color:#94a3b8;font-size:13px;margin-top:6px;line-height:1.35}
+.unit-badge{display:inline-block;background:#0b1220;border:1px solid #3b82f6;border-radius:999px;padding:2px 8px;font-size:11px;color:#3b82f6;margin-top:4px}
+.stats{display:flex;gap:10px;margin-top:8px}
+.stat{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:4px 10px;font-size:12px}
+.stat b{color:#fff}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:20px}
+.modalBox{width:100%;max-width:520px;background:#111b33;border:1px solid #334155;border-radius:16px;padding:24px 28px}
+.modalTitle{font-weight:800;margin:0 0 18px 0;font-size:20px;color:#fff}
+.modalActions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid #1e293b}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;margin-bottom:6px;font-size:13px;color:#94a3b8;font-weight:500}
+.form-group input,.form-group textarea,.form-group select{width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;border:1px solid #334155;background:#0b1220;color:#e2e8f0;font-size:14px;transition:border-color .2s}
+.form-group input:focus,.form-group textarea:focus,.form-group select:focus{border-color:#2563eb;outline:none}
+</style></head><body>
+<div class=top><div class=left><a href=/>&#8592; Voltar</a><h1>Locais</h1><div class=small id=count></div></div>
+<button class="btn btn-primary" onclick="openCreateModal()">+ Novo Local</button></div>
+<div id=grid class=grid></div>
+<div id=modal class=modal onclick="hideModal()"><div class=modalBox onclick="event.stopPropagation()">
+<h3 class=modalTitle id=modalTitle>Novo Local</h3>
+<div class=form-group><label>Unidade *</label><select id=locUnit></select></div>
+<div class=form-group><label>Nome *</label><input id=locName placeholder="Ex: Administrativo" /></div>
+<div class=form-group><label>Descricao</label><textarea id=locDesc placeholder="Descricao do local..."></textarea></div>
+<div class=modalActions><button class=btn onclick="hideModal()">Cancelar</button><button class="btn btn-primary" onclick="saveLocation()">Salvar</button></div>
+</div></div>
+<script>
+var locations=[],units=[],computers=[],editingId=null;
+async function load(){
+  var l=await fetch("/api/locations"); locations=await l.json();
+  var u=await fetch("/api/units"); units=await u.json();
+  var c=await fetch("/api/computers"); var cd=await c.json(); computers=cd.computers||[];
+  render();
+}
+function render(){
+  var g=document.getElementById("grid");
+  g.innerHTML="";
+  document.getElementById("count").innerText=locations.length+" locais";
+  if(!locations.length){
+    var m=document.createElement("div");
+    m.className="muted";m.textContent="Nenhum local cadastrado.";
+    g.appendChild(m);return;
+  }
+  for(var i=0;i<locations.length;i++){
+    var loc=locations[i];
+    var pcCount=0;
+    for(var j=0;j<computers.length;j++){
+      if(computers[j].location_id==loc.location_id)pcCount++;
+    }
+    var card=document.createElement("div");card.className="card";
+    var row=document.createElement("div");row.className="row";
+    var left=document.createElement("div");
+    var title=document.createElement("div");title.className="title";title.textContent=loc.name;left.appendChild(title);
+    var unitBadge=document.createElement("div");unitBadge.className="unit-badge";unitBadge.textContent=loc.unit_name||"Sem unidade";left.appendChild(unitBadge);
+    var desc=document.createElement("div");desc.className="muted";desc.textContent=loc.description||"Sem descricao";left.appendChild(desc);
+    var stats=document.createElement("div");stats.className="stats";
+    var s1=document.createElement("div");s1.className="stat";var b1=document.createElement("b");b1.textContent=pcCount;s1.appendChild(b1);s1.appendChild(document.createTextNode(" PCs"));stats.appendChild(s1);
+    left.appendChild(stats);row.appendChild(left);
+    var right=document.createElement("div");right.style.display="flex";right.style.gap="6px";
+    var editBtn=document.createElement("button");editBtn.className="btn";editBtn.textContent="Editar";(function(idx){editBtn.onclick=function(){openEditModal(idx);};})(i);right.appendChild(editBtn);
+    var delBtn=document.createElement("button");delBtn.className="btn btn-danger";delBtn.textContent="Excluir";(function(lid){delBtn.onclick=function(){deleteLocation(lid);};})(loc.location_id);right.appendChild(delBtn);
+    row.appendChild(right);card.appendChild(row);g.appendChild(card);
+  }
+}
+function populateUnitSelect(){
+  var sel=document.getElementById("locUnit");
+  sel.innerHTML="";
+  for(var i=0;i<units.length;i++){
+    var o=document.createElement("option");o.value=units[i].unit_id;o.textContent=units[i].name;sel.appendChild(o);
+  }
+}
+function openCreateModal(){
+  editingId=null;
+  document.getElementById("modalTitle").innerText="Novo Local";
+  populateUnitSelect();
+  document.getElementById("locName").value="";
+  document.getElementById("locDesc").value="";
+  document.getElementById("locUnit").disabled=false;
+  document.getElementById("modal").style.display="flex";
+}
+function openEditModal(idx){
+  var loc=locations[idx];if(!loc)return;
+  editingId=loc.location_id;
+  document.getElementById("modalTitle").innerText="Editar Local";
+  populateUnitSelect();
+  document.getElementById("locUnit").value=loc.unit_id;
+  document.getElementById("locUnit").disabled=true;
+  document.getElementById("locName").value=loc.name;
+  document.getElementById("locDesc").value=loc.description||"";
+  document.getElementById("modal").style.display="flex";
+}
+function hideModal(){document.getElementById("modal").style.display="none";}
+async function saveLocation(){
+  var unitId=parseInt(document.getElementById("locUnit").value);
+  var name=document.getElementById("locName").value.trim();
+  var desc=document.getElementById("locDesc").value.trim();
+  if(!name){alert("Nome e obrigatorio");return;}
+  var body={unit_id:unitId,name:name,description:desc};
+  var url="/api/locations";if(editingId)url="/api/locations/"+editingId;
+  var r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  if(!r.ok){var e=await r.json();alert(e.error||"Erro");return;}
+  hideModal();await load();
+}
+async function deleteLocation(id){if(!confirm("Excluir este local?"))return;await fetch("/api/locations/"+id,{method:"DELETE"});await load();}
+load();
+</script></body></html>

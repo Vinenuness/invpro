@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8" />
+<title>Dashboard - Painel</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+body{font-family:Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:20px}
+h1{margin:0}
+.top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:20px}
+.left{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+a{color:#e2e8f0;text-decoration:none}
+.btn{border:1px solid #334155;background:#0b1220;color:#e2e8f0;padding:8px 14px;border-radius:10px;cursor:pointer;font-size:13px}
+.btn:hover{background:#0f1a2e}
+.btn-primary{background:#2563eb;border-color:#2563eb}
+.btn-primary:hover{background:#1d4ed8}
+.small{font-size:12px;color:#94a3b8}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-bottom:24px}
+.card{background:#1e293b;border:1px solid #334155;border-radius:14px;padding:18px}
+.card-label{font-size:13px;color:#94a3b8;margin-bottom:6px}
+.card-value{font-size:32px;font-weight:800;color:#fff}
+.card-value.green{color:#22c55e}
+.card-value.blue{color:#3b82f6}
+.card-value.yellow{color:#f59e0b}
+.card-value.purple{color:#a855f7}
+.charts{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:14px;margin-bottom:24px}
+.chart-box{background:#1e293b;border:1px solid #334155;border-radius:14px;padding:18px}
+.chart-title{font-weight:700;margin-bottom:12px;font-size:15px}
+.section-title{font-weight:700;font-size:18px;margin-bottom:12px;color:#fff}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:10px 12px;border-bottom:2px solid #334155;color:#94a3b8;font-size:13px}
+td{padding:10px 12px;border-bottom:1px solid #1e293b;font-size:13px}
+.badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600}
+.badge-done{background:#052e16;color:#22c55e}
+.badge-queued{background:#1e1b4b;color:#818cf8}
+.badge-running{background:#172554;color:#60a5fa}
+.badge-failed{background:#450a0a;color:#f87171}
+.export-bar{display:flex;gap:10px;align-items:center;margin-bottom:16px}
+.export-bar select{padding:8px 12px;border-radius:10px;border:1px solid #334155;background:#0b1220;color:#e2e8f0}
+</style></head><body>
+<div class="top">
+  <div class="left">
+    <a href="/">&#8592; Voltar</a>
+    <h1>Dashboard</h1>
+  </div>
+  <div style="display:flex;gap:8px">
+    <div class="export-bar">
+      <select id="exportUnit"><option value="">Todas as unidades</option></select>
+      <a id="csvLink" class="btn btn-primary" href="/api/export/csv" download>&#11015; CSV</a>
+      <a class="btn btn-primary" href="/api/export/pdf" download>&#128196; PDF</a>
+    </div>
+  </div>
+</div>
+
+<div class="cards">
+  <div class="card"><div class="card-label">Total PCs</div><div class="card-value blue" id="totalPCs">-</div></div>
+  <div class="card"><div class="card-label">Unidades</div><div class="card-value green" id="totalUnits">-</div></div>
+  <div class="card"><div class="card-label">Usuarios</div><div class="card-value purple" id="totalUsers">-</div></div>
+  <div class="card"><div class="card-label">Scripts</div><div class="card-value yellow" id="totalScripts">-</div></div>
+</div>
+
+<div class="charts">
+  <div class="chart-box"><div class="chart-title">CPU / RAM Media</div><canvas id="metricChart" height="200"></canvas></div>
+  <div class="chart-box"><div class="chart-title">PCs por Unidade</div><canvas id="unitChart" height="200"></canvas></div>
+  <div class="chart-box"><div class="chart-title">Distribuicao de OS</div><canvas id="osChart" height="200"></canvas></div>
+  <div class="chart-box"><div class="chart-title">Armazenamento Total</div><canvas id="diskChart" height="200"></canvas></div>
+</div>
+
+<div class="section-title">Jobs Recentes</div>
+<div class="card">
+  <table>
+    <thead><tr><th>Script</th><th>PC</th><th>Status</th><th>Data</th></tr></thead>
+    <tbody id="jobsBody"><tr><td colspan=4 class="small">Nenhum job encontrado.</td></tr></tbody>
+  </table>
+</div>
+
+<script>
+var chartInstances={};
+var colors=["#3b82f6","#22c55e","#f59e0b","#ef4444","#a855f7","#06b6d4","#f97316","#ec4899"];
+
+async function loadDashboard() {
+  var res=await fetch("/api/dashboard");
+  var d=await res.json();
+  document.getElementById("totalPCs").innerText=d.total_computers;
+  document.getElementById("totalUnits").innerText=d.total_units;
+  document.getElementById("totalUsers").innerText=d.total_users;
+  document.getElementById("totalScripts").innerText=d.total_scripts;
+
+  var sel=document.getElementById("exportUnit");
+  d.computers_per_unit.forEach(function(u){
+    var o=document.createElement("option");
+    o.value=u.unit; o.textContent=u.unit+" ("+u.count+")";
+    sel.appendChild(o);
+  });
+  sel.onchange=function(){
+    var v=this.value;
+    var csv=document.getElementById("csvLink");
+    csv.href="/api/export/csv"+(v?"?unit_name="+encodeURIComponent(v):"");
+  };
+
+  if(chartInstances.metric) chartInstances.metric.destroy();
+  chartInstances.metric=new Chart(document.getElementById("metricChart"),{
+    type:"bar",
+    data:{labels:["CPU Media","RAM Media"],datasets:[{label:"%",data:[d.cpu_average,d.ram_average],backgroundColor:["#3b82f6","#22c55e"],borderRadius:8,barThickness:60}]},
+    options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,max:100,ticks:{color:"#94a3b8"},grid:{color:"#1e293b"}},x:{ticks:{color:"#94a3b8"},grid:{display:false}}}}
+  });
+
+  if(chartInstances.unit) chartInstances.unit.destroy();
+  chartInstances.unit=new Chart(document.getElementById("unitChart"),{
+    type:"doughnut",
+    data:{labels:d.computers_per_unit.map(function(u){return u.unit}),datasets:[{data:d.computers_per_unit.map(function(u){return u.count}),backgroundColor:colors.slice(0,d.computers_per_unit.length)}]},
+    options:{responsive:true,plugins:{legend:{position:"bottom",labels:{color:"#e2e8f0",padding:12}}}}
+  });
+
+  var osLabels=Object.keys(d.os_distribution);
+  var osData=Object.values(d.os_distribution);
+  if(chartInstances.os) chartInstances.os.destroy();
+  if(osLabels.length){
+    chartInstances.os=new Chart(document.getElementById("osChart"),{
+      type:"doughnut",
+      data:{labels:osLabels,datasets:[{data:osData,backgroundColor:colors.slice(0,osLabels.length)}]},
+      options:{responsive:true,plugins:{legend:{position:"bottom",labels:{color:"#e2e8f0",padding:12}}}}
+    });
+  }
+
+  if(chartInstances.disk) chartInstances.disk.destroy();
+  var diskUsed=Math.round(d.disk_used_gb*10)/10;
+  var diskTotal=Math.round(d.disk_total_gb*10)/10;
+  var diskFree=Math.round((d.disk_total_gb-d.disk_used_gb)*10)/10;
+  if(diskTotal>0){
+    chartInstances.disk=new Chart(document.getElementById("diskChart"),{
+      type:"doughnut",
+      data:{labels:["Usado ("+diskUsed+" GB)","Livre ("+diskFree+" GB)"],datasets:[{data:[diskUsed,diskFree],backgroundColor:["#ef4444","#22c55e"]}]},
+      options:{responsive:true,plugins:{legend:{position:"bottom",labels:{color:"#e2e8f0",padding:12}}}}
+    });
+  }
+
+  var tbody=document.getElementById("jobsBody");
+  if(d.recent_jobs.length){
+    tbody.innerHTML=d.recent_jobs.map(function(j){
+      var bc="badge-queued";
+      if(j.status==="done")bc="badge-done";
+      else if(j.status==="running")bc="badge-running";
+      else if(j.status==="failed")bc="badge-failed";
+      return "<tr><td>"+j.script_name+"</td><td>"+(j.hostname||"-")+"</td><td><span class=badge "+bc+">"+j.status+"</span></td><td class=small>"+(j.created_at?j.created_at.substring(0,19):"-")+"</td></tr>";
+    }).join("");
+  }
+}
+loadDashboard();
+</script></body></html>

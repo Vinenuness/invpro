@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Scripts (.bat)</title>
+  <style>
+    body{font-family:Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:20px}
+    a{color:#38bdf8;text-decoration:none}
+    .box{max-width:1100px;margin:auto;background:#1e293b;border:1px solid #334155;border-radius:14px;padding:16px}
+    .top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+    h2{margin:0;color:#fff}
+    h3{margin:18px 0 10px 0;color:#fff}
+    .muted{color:#94a3b8;font-size:12px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px}
+    .card{background:#0b1220;border:1px solid #334155;border-radius:12px;padding:12px}
+    input, textarea, select{
+      width:100%;background:#0b1220;color:#e2e8f0;border:1px solid #334155;border-radius:10px;
+      padding:10px;outline:none
+    }
+    textarea{min-height:180px;resize:vertical;font-family:Consolas,monospace}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .btn{border:1px solid #334155;background:#0b1220;color:#e2e8f0;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:12px}
+    .btn:hover{background:#0f1a2e}
+    .btn:disabled{opacity:.55;cursor:not-allowed}
+    .danger{border-color:#7f1d1d;background:#1b0b0b;color:#fecaca}
+    .danger:hover{background:#2a0d0d}
+    pre{background:#0b1220;border:1px solid #334155;border-radius:12px;padding:12px;overflow:auto;color:#cbd5e1;font-size:12px}
+
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:20px}
+    .modalBox{width:100%;max-width:760px;background:#111b33;border:1px solid #334155;border-radius:14px;padding:16px}
+    .modalTitle{font-weight:800;margin:0 0 10px 0}
+    .modalActions{display:flex;gap:10px;justify-content:flex-end;margin-top:12px}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="top">
+      <div>
+        <h2>Scripts (.bat)</h2>
+        <div class="muted">Criar, editar, excluir e solicitar execução em um PC.</div>
+      </div>
+      <div class="row">
+        <a class="btn" href="/">← Voltar ao Painel</a>
+        <button class="btn" id="btnRefresh" onclick="loadAll()">Atualizar</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <!-- CRIAR -->
+      <div class="card">
+        <h3>Novo script</h3>
+        <div class="muted">Nome</div>
+        <input id="name" placeholder="Ex: Limpar TEMP" />
+        <div class="muted" style="margin-top:10px">Conteúdo (.bat)</div>
+        <textarea id="content" placeholder="@echo off&#10;echo OK&#10;exit /b 0"></textarea>
+
+        <div class="row" style="justify-content:flex-end;margin-top:10px">
+          <button class="btn" onclick="example()">Exemplo</button>
+          <button class="btn" id="btnCreate" onclick="createScript()">Salvar</button>
+        </div>
+
+        <div class="muted" id="msg" style="margin-top:10px"></div>
+      </div>
+
+      <!-- LISTA + EXEC -->
+      <div class="card">
+        <h3>Selecionar script</h3>
+        <div class="muted">Escolha o script para prévia/editar/excluir.</div>
+        <select id="sel" onchange="showSelected()" style="margin-top:10px"></select>
+
+        <div class="row" style="justify-content:flex-end;margin-top:10px">
+          <button class="btn" id="btnEdit" onclick="openEdit()">Editar</button>
+          <button class="btn danger" id="btnDel" onclick="deleteSelected()">Excluir</button>
+        </div>
+
+        <div class="muted" style="margin-top:10px">Prévia:</div>
+        <pre id="preview">Carregando...</pre>
+
+        <h3 style="margin-top:18px">Executar em PC</h3>
+        <div class="muted">Selecione o PC e clique para solicitar execução.</div>
+        <select id="pcSel" style="margin-top:10px" onchange="loadJobsForSelectedPc()"></select>
+
+        <div class="row" style="justify-content:flex-end;margin-top:10px">
+          <button class="btn" id="btnRun" onclick="createJob()">Solicitar execução</button>
+        </div>
+
+        <div class="muted" style="margin-top:10px">Últimos jobs do PC:</div>
+        <pre id="jobsOut">Selecione um PC...</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL EDIT -->
+  <div id="modal" class="modal" onclick="closeModal()">
+    <div class="modalBox" onclick="event.stopPropagation()">
+      <h3 class="modalTitle">Editar script</h3>
+      <div class="muted">Nome</div>
+      <input id="editName" />
+      <div class="muted" style="margin-top:10px">Conteúdo (.bat)</div>
+      <textarea id="editContent"></textarea>
+      <div class="modalActions">
+        <button class="btn" onclick="closeModal()">Cancelar</button>
+        <button class="btn" id="btnSaveEdit" onclick="saveEdit()">Salvar alterações</button>
+      </div>
+      <div class="muted" id="editMsg" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <script>
+    let scripts = [];
+    let pcs = [];
+    let selectedId = "";
+    let selectedFull = null;
+
+    function setMsg(t){ document.getElementById("msg").innerText = t || ""; }
+    function setEditMsg(t){ document.getElementById("editMsg").innerText = t || ""; }
+
+    function example(){
+      document.getElementById("name").value = "Limpar TEMP (exemplo)";
+      document.getElementById("content").value =
+`@echo off
+echo Limpando TEMP...
+del /q /f %temp%\\*.* 2>nul
+echo OK
+exit /b 0
+`;
+    }
+
+    function setBusy(btnId, busyText, busy){
+      const b = document.getElementById(btnId);
+      if(!b) return;
+      if(busy){
+        b.dataset.oldText = b.innerText;
+        b.innerText = busyText;
+        b.disabled = true;
+      }else{
+        b.innerText = b.dataset.oldText || b.innerText;
+        b.disabled = false;
+      }
+    }
+
+    async function loadScripts(){
+      const res = await fetch("/api/scripts");
+      scripts = await res.json();
+
+      const sel = document.getElementById("sel");
+      sel.innerHTML = "";
+
+      if(!scripts.length){
+        sel.innerHTML = `<option value="">Nenhum script cadastrado</option>`;
+        document.getElementById("preview").textContent = "Crie um script à esquerda 🙂";
+        selectedId = "";
+        selectedFull = null;
+        return;
+      }
+
+      scripts.forEach(s => sel.innerHTML += `<option value="${s.script_id}">${s.name}</option>`);
+      selectedId = sel.value;
+      await showSelected();
+    }
+
+    async function showSelected(){
+      selectedId = document.getElementById("sel").value;
+
+      if(!selectedId){
+        document.getElementById("preview").textContent = "";
+        selectedFull = null;
+        return;
+      }
+
+      const res = await fetch(`/api/scripts/${encodeURIComponent(selectedId)}`);
+      if(!res.ok){
+        document.getElementById("preview").textContent = "Erro ao carregar script.";
+        selectedFull = null;
+        return;
+      }
+
+      selectedFull = await res.json();
+      document.getElementById("preview").textContent = selectedFull.content || "(vazio)";
+    }
+
+    async function createScript(){
+      setMsg("");
+      const name = document.getElementById("name").value.trim();
+      const content = document.getElementById("content").value;
+
+      if(!name || !content.trim()){
+        setMsg("Preencha nome e conteúdo.");
+        return;
+      }
+
+      setBusy("btnCreate", "Salvando...", true);
+      try{
+        const res = await fetch("/api/scripts", {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ name, content })
+        });
+
+        const txt = await res.text();
+        if(!res.ok){
+          setMsg("Erro ao salvar: " + txt);
+          return;
+        }
+
+        document.getElementById("name").value = "";
+        document.getElementById("content").value = "";
+        setMsg("Salvo ✅");
+        await loadScripts();
+      }finally{
+        setBusy("btnCreate", "", false);
+      }
+    }
+
+    function openEdit(){
+      if(!selectedFull){
+        alert("Selecione um script.");
+        return;
+      }
+      setEditMsg("");
+      document.getElementById("editName").value = selectedFull.name || "";
+      document.getElementById("editContent").value = selectedFull.content || "";
+      document.getElementById("modal").style.display = "flex";
+    }
+
+    function closeModal(){ document.getElementById("modal").style.display = "none"; }
+
+    async function saveEdit(){
+      if(!selectedId){
+        setEditMsg("Selecione um script.");
+        return;
+      }
+      const name = document.getElementById("editName").value.trim();
+      const content = document.getElementById("editContent").value;
+
+      if(!name || !content.trim()){
+        setEditMsg("Preencha nome e conteúdo.");
+        return;
+      }
+
+      setBusy("btnSaveEdit", "Salvando...", true);
+      try{
+        const res = await fetch(`/api/scripts/${encodeURIComponent(selectedId)}`, {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ name, content })
+        });
+
+        const txt = await res.text();
+        if(!res.ok){
+          setEditMsg("Erro ao salvar: " + txt);
+          return;
+        }
+
+        closeModal();
+        await loadScripts();
+      }finally{
+        setBusy("btnSaveEdit", "", false);
+      }
+    }
+
+    async function deleteSelected(){
+      if(!selectedId){
+        alert("Selecione um script.");
+        return;
+      }
+      const ok = confirm("Deseja realmente excluir este script?");
+      if(!ok) return;
+
+      setBusy("btnDel", "Excluindo...", true);
+      try{
+        const res = await fetch(`/api/scripts/${encodeURIComponent(selectedId)}`, { method: "DELETE" });
+        const txt = await res.text();
+        if(!res.ok){
+          alert("Erro ao excluir: " + txt);
+          return;
+        }
+        await loadScripts();
+      }finally{
+        setBusy("btnDel", "", false);
+      }
+    }
+
+    async function loadPcs(){
+      const res = await fetch("/dados");
+      pcs = await res.json();
+
+      // só PCs com device_uid
+      pcs = pcs.filter(p => (p._device_uid || "").trim() !== "");
+
+      const sel = document.getElementById("pcSel");
+      sel.innerHTML = "";
+
+      if(!pcs.length){
+        sel.innerHTML = `<option value="">Nenhum PC com device_uid</option>`;
+        return;
+      }
+
+      pcs.forEach(p => {
+        const name = (p._tag_evo ? (p._tag_evo + " • ") : "") + (p._alias ? (p._alias + " (" + p.hostname + ")") : p.hostname);
+        sel.innerHTML += `<option value="${p._device_uid}">${name}</option>`;
+      });
+    }
+
+    async function createJob(){
+      const script_id = document.getElementById("sel").value;
+      const device_uid = document.getElementById("pcSel").value;
+
+      if(!script_id){
+        alert("Selecione um script primeiro.");
+        return;
+      }
+      if(!device_uid){
+        alert("Selecione um PC.");
+        return;
+      }
+
+      const ok = confirm("Enviar solicitação de execução para este PC?");
+      if(!ok) return;
+
+      setBusy("btnRun", "Enviando...", true);
+      try{
+        const res = await fetch("/api/jobs/create", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ device_uid, script_id })
+        });
+
+        const data = await res.json().catch(()=>({}));
+        if(!res.ok){
+          alert("Erro ao criar job: " + (data.msg || JSON.stringify(data) || "Falha"));
+          return;
+        }
+
+        alert("Solicitação enviada ✅");
+        await loadJobsForSelectedPc();
+      }catch(err){
+        alert("Erro inesperado: " + err);
+      }finally{
+        setBusy("btnRun", "", false);
+      }
+    }
+
+    async function loadJobsForSelectedPc(){
+      const device_uid = document.getElementById("pcSel").value;
+      if(!device_uid){
+        document.getElementById("jobsOut").textContent = "Selecione um PC...";
+        return;
+      }
+      const res = await fetch(`/api/jobs?device_uid=${encodeURIComponent(device_uid)}`);
+      const data = await res.json().catch(()=>[]);
+      document.getElementById("jobsOut").textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function loadAll(){
+      setMsg("");
+      await loadScripts();
+      await loadPcs();
+      await loadJobsForSelectedPc();
+    }
+
+    loadAll();
+    setInterval(loadJobsForSelectedPc, 5000);
+  </script>
+</body>
+</html>

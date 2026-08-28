@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Detalhes</title>
+  <style>
+    body{font-family:Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:20px}
+    a{color:#38bdf8;text-decoration:none}
+    .box{max-width:1100px;margin:auto;background:#1e293b;border:1px solid #334155;border-radius:14px;padding:16px}
+    h2{margin:0 0 6px 0;color:#fff}
+    h3{margin:18px 0 10px 0;color:#fff}
+    .muted{color:#94a3b8;font-size:12px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+    .card{background:#0b1220;border:1px solid #334155;border-radius:12px;padding:12px}
+    .kv{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #223047}
+    .kv:last-child{border-bottom:0}
+    .k{color:#94a3b8}
+    .v{color:#e2e8f0;font-weight:600;text-align:right;word-break:break-word}
+    ul{margin:8px 0 0 18px}
+    li{margin:4px 0}
+    .btn{border:1px solid #334155;background:#0b1220;color:#e2e8f0;padding:8px 10px;border-radius:10px;cursor:pointer;font-size:12px}
+    .btn:hover{background:#0f1a2e}
+    .rowtop{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+    .pill{display:inline-block;background:#0b1220;border:1px solid #334155;border-radius:999px;padding:4px 10px;font-size:12px;color:#cbd5e1}
+    /* Modal */
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:20px}
+    .modalBox{width:100%;max-width:760px;background:#111b33;border:1px solid #334155;border-radius:14px;padding:16px}
+    .modalTitle{font-weight:800;margin:0 0 10px 0}
+    .modalActions{display:flex;gap:10px;justify-content:flex-end;margin-top:12px}
+    select{width:100%;padding:10px;border-radius:10px;border:1px solid #334155;background:#0b1220;color:#e2e8f0}
+    pre{background:#0b1220;border:1px solid #334155;border-radius:12px;padding:12px;overflow:auto;color:#cbd5e1;font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="rowtop">
+      <a href="/">← Voltar</a>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <button class="btn" onclick="openScriptModal()">Executar Script (.bat)</button>
+
+        <form method="post" action="/pc/{{ pc.get('_agent_id','') }}/delete"
+              onsubmit="return confirm('Tem certeza que deseja excluir este computador?\n\nObs: Se o agente ainda estiver rodando nesse PC, ele vai reaparecer no próximo envio.');">
+          <button class="btn">Excluir</button>
+        </form>
+      </div>
+    </div>
+
+    {% set alias = pc.get('_alias') %}
+    {% set host = pc.get('hostname','N/A') %}
+    <h2>{{ (alias ~ " (" ~ host ~ ")") if alias else host }}</h2>
+
+    <div class="muted">
+      Último envio: {{ pc.get('_last_seen','N/A') }} •
+      TAG: <span class="pill">{{ pc.get('_tag_evo') or "N/A" }}</span> •
+      Device UID: <span class="pill">{{ pc.get('_device_uid') or "N/A" }}</span>
+    </div>
+
+    {% set net = pc.get('network') or {} %}
+    {% if net is string %}{% set net = {} %}{% endif %}
+
+    <!-- RESUMO -->
+    <div class="grid">
+      <div class="card">
+        <div class="kv"><div class="k">AnyDesk</div><div class="v">{{ pc.get('anydesk_id') or "N/A" }}</div></div>
+        <div class="kv"><div class="k">Usuário Windows</div><div class="v">{{ pc.get('windows_user') or "N/A" }}</div></div>
+        <div class="kv"><div class="k">IP</div><div class="v">{{ net.get('ip') or "N/A" }}</div></div>
+        <div class="kv"><div class="k">MAC</div><div class="v">{{ net.get('mac') or "N/A" }}</div></div>
+      </div>
+
+      <div class="card">
+        <div class="kv"><div class="k">SO</div><div class="v">{{ pc.get('os_caption') or "N/A" }}</div></div>
+        <div class="kv"><div class="k">Versão</div><div class="v">{{ pc.get('os_version') or "N/A" }}</div></div>
+        <div class="kv"><div class="k">CPU</div><div class="v">{{ pc.get('cpu') or "N/A" }}</div></div>
+        <div class="kv"><div class="k">RAM</div><div class="v">{{ pc.get('ram_total_gb') or pc.get('ram_gb') or "N/A" }} GB</div></div>
+      </div>
+    </div>
+
+    <!-- MONITORES -->
+    <h3>Monitores</h3>
+    <div class="card">
+      {% set mons = pc.get('monitores') or [] %}
+      {% if mons and mons is iterable and mons is not string %}
+        <ul>
+          {% for m in mons %}
+            {% if m is mapping %}
+              <li>
+                <b>{{ m.get('model') or m.get('name') or "Monitor" }}</b>
+                {% if m.get('manufacturer') %} — {{ m.get('manufacturer') }}{% endif %}
+                {% if m.get('serial') %} — Serial: {{ m.get('serial') }}{% endif %}
+                {% if m.get('width_cm') or m.get('height_cm') %}
+                  — Tamanho: {{ m.get('width_cm') or "?" }}x{{ m.get('height_cm') or "?" }} cm
+                {% endif %}
+              </li>
+            {% else %}
+              <li>{{ m }}</li>
+            {% endif %}
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="muted">N/A</div>
+      {% endif %}
+    </div>
+
+    <!-- ARMAZENAMENTO -->
+    <h3>Armazenamento</h3>
+    <div class="grid">
+      <div class="card">
+        <div class="muted"><b>Discos físicos</b></div>
+        {% set disks = pc.get('physical_disks') or [] %}
+        {% if disks and disks is iterable and disks is not string %}
+          <ul>
+            {% for d in disks %}
+              <li>
+                {% if d is mapping %}
+                  <b>{{ d.get('name') or "Disco" }}</b>
+                  {% if d.get('media_type') %} ({{ d.get('media_type') }}){% endif %}
+                  {% if d.get('size_gb') %} — {{ d.get('size_gb') }} GB{% endif %}
+                {% else %}
+                  {{ d }}
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="muted">N/A</div>
+        {% endif %}
+      </div>
+
+      <div class="card">
+        <div class="muted"><b>Volumes</b></div>
+        {% set vols = pc.get('volumes') or [] %}
+        {% if vols and vols is iterable and vols is not string %}
+          <ul>
+            {% for v in vols %}
+              <li>
+                {% if v is mapping %}
+                  <b>{{ v.get('mount') or v.get('device') or "Volume" }}</b>
+                  {% if v.get('fstype') %} — {{ v.get('fstype') }}{% endif %}
+                  {% if v.get('free_gb') is not none and v.get('total_gb') is not none %}
+                    — Livre: {{ v.get('free_gb') }} GB / Total: {{ v.get('total_gb') }} GB
+                  {% endif %}
+                {% else %}
+                  {{ v }}
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="muted">N/A</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- GPU -->
+    <h3>GPU</h3>
+    <div class="card">
+      {% set g = pc.get('gpu') or [] %}
+      {% if g and g is iterable and g is not string %}
+        <ul>
+          {% for x in g %}<li>{{ x }}</li>{% endfor %}
+        </ul>
+      {% else %}
+        <div class="muted">N/A</div>
+      {% endif %}
+    </div>
+
+    <!-- PROGRAMAS -->
+    <h3>Programas instalados</h3>
+    <div class="card">
+      {% set progs = pc.get('programas') or pc.get('programs') or [] %}
+      {% if progs and progs is iterable and progs is not string %}
+        <div class="muted">Total: {{ progs|length }}</div>
+        <ul>
+          {% for p in progs[:120] %}
+            <li>{{ p }}</li>
+          {% endfor %}
+        </ul>
+        {% if progs|length > 120 %}
+          <div class="muted">Mostrando 120 de {{ progs|length }} (limite pra não travar a página).</div>
+        {% endif %}
+      {% else %}
+        <div class="muted">N/A</div>
+      {% endif %}
+    </div>
+
+    <!-- DEBUG opcional -->
+    <h3>Debug (JSON completo)</h3>
+    <pre>{{ pc | tojson(indent=2) }}</pre>
+  </div>
+
+  <!-- MODAL EXECUÇÃO DE SCRIPT -->
+  <div id="scriptModal" class="modal" onclick="closeScriptModal()">
+    <div class="modalBox" onclick="event.stopPropagation()">
+      <h3 class="modalTitle">Executar Script (.bat)</h3>
+      <div class="muted">Device UID: <b>{{ pc.get('_device_uid') or '' }}</b></div>
+
+      <div style="margin-top:10px" class="muted">Escolha um script:</div>
+      <select id="scriptSelect"></select>
+
+      <div class="modalActions">
+        <button class="btn" onclick="closeScriptModal()">Cancelar</button>
+        <button class="btn" onclick="runScript()">Executar</button>
+      </div>
+
+      <h3 style="margin-top:16px">Jobs (últimos)</h3>
+      <pre id="jobsOut">Carregando...</pre>
+    </div>
+  </div>
+
+  <script>
+    const DEVICE_UID = "{{ pc.get('_device_uid') or '' }}";
+
+    function openScriptModal(){
+      if(!DEVICE_UID){
+        alert("Este PC ainda não tem device_uid (agente antigo). Atualize o agente nesta máquina.");
+        return;
+      }
+      document.getElementById("scriptModal").style.display = "flex";
+      loadScripts();
+      loadJobs();
+    }
+
+    function closeScriptModal(){
+      document.getElementById("scriptModal").style.display = "none";
+    }
+
+    async function loadScripts(){
+      const res = await fetch("/api/scripts");
+      const data = await res.json();
+      const sel = document.getElementById("scriptSelect");
+      sel.innerHTML = "";
+      (data || []).forEach(s => {
+        sel.innerHTML += `<option value="${s.script_id}">${s.name}</option>`;
+      });
+      if(!sel.innerHTML){
+        sel.innerHTML = `<option value="">Nenhum script cadastrado</option>`;
+      }
+    }
+
+    async function runScript(){
+      const script_id = document.getElementById("scriptSelect").value;
+      if(!script_id){
+        alert("Cadastre um script primeiro em /scripts.");
+        return;
+      }
+
+      const res = await fetch("/api/jobs/create", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ device_uid: DEVICE_UID, script_id })
+      });
+
+      const txt = await res.text();
+      if(!res.ok){
+        alert("Erro ao criar job: " + txt);
+        return;
+      }
+
+      alert("Job criado. O agente executará e o resultado aparecerá aqui.");
+      setTimeout(loadJobs, 1000);
+    }
+
+    async function loadJobs(){
+      const res = await fetch(`/api/jobs?device_uid=${encodeURIComponent(DEVICE_UID)}`);
+      const data = await res.json();
+      document.getElementById("jobsOut").textContent = JSON.stringify(data, null, 2);
+    }
+  </script>
+</body>
+</html>
