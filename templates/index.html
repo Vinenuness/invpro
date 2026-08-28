@@ -1,282 +1,185 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>Painel - Inventário</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>InvPro - Computadores</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    body{font-family:Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:20px}
-    h1{margin:0}
-    .top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}
-    .left{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-    input{padding:10px 12px;border-radius:10px;border:1px solid #334155;background:#0b1220;color:#e2e8f0;outline:none;min-width:280px}
-    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
-    .card{background:#1e293b;border:1px solid #334155;border-radius:14px;padding:14px;transition:.15s}
-    .card:hover{transform:translateY(-2px);background:#22324a}
-    .row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
-    .title{font-weight:800;color:#fff;font-size:16px}
-    .muted{color:#94a3b8;font-size:13px;margin-top:6px;line-height:1.35}
-    .btn{border:1px solid #334155;background:#0b1220;color:#e2e8f0;padding:8px 10px;border-radius:10px;cursor:pointer;font-size:12px}
-    .btn:hover{background:#0f1a2e}
-    a{color:#e2e8f0;text-decoration:none}
-    .small{font-size:12px;color:#94a3b8}
-    .online{color:#22c55e}
-    .offline{color:#f59e0b}
-    .danger{color:#ef4444}
-    .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:20px}
-    .modalBox{width:100%;max-width:520px;background:#111b33;border:1px solid #334155;border-radius:14px;padding:16px}
-    .modalTitle{font-weight:800;margin:0 0 10px 0}
-    .modalActions{display:flex;gap:10px;justify-content:flex-end;margin-top:12px}
-    .menu-wrap{position:relative}
-    .menu-btn{background:#2563eb;border:none;color:#fff;padding:10px 16px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px}
-    .menu-btn:hover{background:#1d4ed8}
-    .menu-btn svg{width:16px;height:16px}
-    .menu-dropdown{display:none;position:absolute;right:0;top:100%;margin-top:6px;background:#111b33;border:1px solid #334155;border-radius:12px;padding:6px 0;min-width:180px;z-index:50;box-shadow:0 10px 30px rgba(0,0,0,.4)}
-    .menu-dropdown.show{display:block}
-    .menu-dropdown a{display:block;padding:10px 16px;color:#e2e8f0;text-decoration:none;font-size:13px;transition:background .15s}
-    .menu-dropdown a:hover{background:#1e293b}
-    .menu-dropdown hr{border:none;border-top:1px solid #334155;margin:4px 0}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;background:#0a0e1a;color:#e2e8f0;margin:0;padding:0;min-height:100vh}
+
+/* Top bar */
+.top-bar{background:rgba(15,23,42,0.95);backdrop-filter:blur(20px);border-bottom:1px solid rgba(51,65,85,0.3);padding:14px 24px;display:flex;gap:16px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-icon{width:36px;height:36px;background:linear-gradient(135deg,#38bdf8,#818cf8);border-radius:10px;display:flex;align-items:center;justify-content:center}
+.brand-icon svg{width:20px;height:20px;color:white}
+.brand-text{font-size:20px;font-weight:800;background:linear-gradient(135deg,#38bdf8,#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.brand-sub{font-size:11px;color:#64748b;font-weight:500}
+.top-right{display:flex;gap:10px;align-items:center}
+
+/* Search */
+.search-wrap{position:relative}
+.search-wrap svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:#475569}
+.search-input{padding:10px 14px 10px 38px;border-radius:10px;border:1px solid rgba(51,65,85,0.4);background:rgba(15,23,42,0.6);color:#e2e8f0;font-size:13px;font-family:inherit;width:320px;transition:all 0.2s}
+.search-input:focus{outline:none;border-color:#38bdf8;box-shadow:0 0 0 3px rgba(56,189,248,0.1)}
+.search-input::placeholder{color:#475569}
+
+/* Stats */
+.stats-bar{display:flex;gap:12px;padding:16px 24px;flex-wrap:wrap}
+.stat-chip{background:rgba(30,41,59,0.6);border:1px solid rgba(51,65,85,0.3);border-radius:10px;padding:8px 14px;font-size:12px;color:#94a3b8;display:flex;align-items:center;gap:6px}
+.stat-chip .num{color:#f8fafc;font-weight:700;font-size:14px}
+
+/* Menu */
+.menu-wrap{position:relative}
+.menu-btn{background:linear-gradient(135deg,#38bdf8,#818cf8);border:none;color:white;padding:10px 18px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;display:flex;align-items:center;gap:8px;transition:all 0.2s;box-shadow:0 4px 12px rgba(56,189,248,0.25)}
+.menu-btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(56,189,248,0.35)}
+.menu-btn svg{width:16px;height:16px}
+.menu-dropdown{display:none;position:absolute;right:0;top:100%;margin-top:8px;background:rgba(15,23,42,0.98);backdrop-filter:blur(20px);border:1px solid rgba(51,65,85,0.4);border-radius:14px;padding:6px 0;min-width:200px;z-index:50;box-shadow:0 20px 40px rgba(0,0,0,0.5)}
+.menu-dropdown.show{display:block}
+.menu-dropdown a{display:flex;align-items:center;gap:10px;padding:11px 18px;color:#e2e8f0;text-decoration:none;font-size:13px;transition:all 0.15s;border-radius:0}
+.menu-dropdown a:hover{background:rgba(56,189,248,0.1);color:#38bdf8}
+.menu-dropdown hr{border:none;border-top:1px solid rgba(51,65,85,0.3);margin:4px 0}
+.menu-dropdown .menu-label{font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:1px;padding:10px 18px 4px;font-weight:600}
+
+/* Grid */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:14px;padding:0 24px 24px}
+
+/* Card */
+.card{background:rgba(30,41,59,0.5);border:1px solid rgba(51,65,85,0.3);border-radius:14px;padding:18px;transition:all 0.2s ease}
+.card:hover{transform:translateY(-2px);border-color:rgba(56,189,248,0.3);box-shadow:0 8px 24px rgba(0,0,0,0.3)}
+.row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.title{font-weight:700;color:#f8fafc;font-size:15px;display:flex;align-items:center;gap:8px}
+.tag-badge{background:linear-gradient(135deg,#38bdf8,#818cf8);color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;letter-spacing:0.5px}
+.muted{color:#94a3b8;font-size:12px;margin-top:6px;line-height:1.4}
+.small{font-size:11px;color:#64748b;margin-top:4px}
+.online{color:#22c55e}
+.offline{color:#f59e0b}
+
+/* Buttons */
+.btn{border:1px solid rgba(51,65,85,0.4);background:rgba(15,23,42,0.6);color:#cbd5e1;padding:7px 12px;border-radius:8px;cursor:pointer;font-size:11px;font-family:inherit;font-weight:500;transition:all 0.15s;display:inline-flex;align-items:center;gap:4px}
+.btn:hover{background:rgba(56,189,248,0.1);border-color:rgba(56,189,248,0.3);color:#38bdf8}
+.btn-danger{border-color:rgba(239,68,68,0.3);color:#f87171}
+.btn-danger:hover{background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.5)}
+.btn-primary{background:linear-gradient(135deg,#38bdf8,#818cf8);border:none;color:white;font-weight:600}
+.btn-primary:hover{box-shadow:0 4px 12px rgba(56,189,248,0.3)}
+a{color:#e2e8f0;text-decoration:none}
+
+/* Modal */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:20px;z-index:100}
+.modalBox{width:100%;max-width:480px;background:rgba(15,23,42,0.98);backdrop-filter:blur(20px);border:1px solid rgba(51,65,85,0.4);border-radius:18px;padding:24px;box-shadow:0 25px 50px rgba(0,0,0,0.5)}
+.modalTitle{font-weight:700;font-size:18px;margin:0 0 4px 0;color:#f8fafc}
+.modalSub{font-size:12px;color:#64748b;margin-bottom:16px}
+.modalActions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;padding-top:16px;border-top:1px solid rgba(51,65,85,0.3)}
+
+/* Form */
+.form-group{margin-bottom:14px}
+.form-label{display:block;font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px}
+.form-input{width:100%;padding:11px 14px;border-radius:10px;border:1px solid rgba(51,65,85,0.4);background:rgba(15,23,42,0.6);color:#f8fafc;font-size:13px;font-family:inherit;transition:all 0.2s}
+.form-input:focus{outline:none;border-color:#38bdf8;box-shadow:0 0 0 3px rgba(56,189,248,0.1)}
+.form-select{width:100%;padding:11px 14px;border-radius:10px;border:1px solid rgba(51,65,85,0.4);background:rgba(15,23,42,0.6);color:#f8fafc;font-size:13px;font-family:inherit;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+
+/* Empty state */
+.empty{text-align:center;padding:60px 20px;color:#475569}
+.empty svg{width:48px;height:48px;margin-bottom:12px;opacity:0.3}
+.empty p{font-size:14px}
   </style>
 </head>
 <body>
-  <div class="top">
-    <div class="left">
-      <h1>Computadores</h1>
-      <div class="small" id="count"></div>
+<div class="top-bar">
+  <div class="brand">
+    <div class="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></div>
+    <div><div class="brand-text">InvPro</div><div class="brand-sub">Computadores</div></div>
+  </div>
+  <div class="top-right">
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input id="q" class="search-input" placeholder="Buscar por TAG, hostname, IP, serial..." oninput="render()" />
     </div>
     <div class="menu-wrap">
-      <button class="menu-btn" onclick="document.getElementById('menuDrop').classList.toggle('show')">
+      <button class="menu-btn" onclick="document.getElementById(&apos;menuDrop&apos;).classList.toggle(&apos;show&apos;)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
         Menu
       </button>
       <div id="menuDrop" class="menu-dropdown">
+        <div class="menu-label">Navegacao</div>
         <a href="/dashboard">Dashboard</a>
-        <a href="/scripts">Scripts (.bat)</a>
+        <a href="/scripts">Scripts</a>
         <a href="/unidades">Unidades</a>
         <a href="/empresas">Empresas</a>
         <a href="/usuarios">Usuarios</a>
         <hr>
-        <a href="/logout" style="color:#ef4444">Sair</a>
-      </div>
-    </div>
-    <input id="q" placeholder="Buscar por TAG, apelido, hostname, IP, serial..." oninput="render()" />
-  </div>
-
-  <div id="grid" class="grid"></div>
-
-  <!-- Modal Vincular Local -->
-  <div id="linkUnitModal" class="modal" onclick="hideLinkUnitModal()">
-    <div class="modalBox" onclick="event.stopPropagation()">
-      <h3 class="modalTitle">Vincular a Unidade</h3>
-      <div class="small" id="linkUnitSub"></div>
-      <select id="unitSelect" onchange="onUnitChange()" style="width:100%;margin-top:10px;padding:10px;border-radius:10px;border:1px solid #334155;background:#0b1220;color:#e2e8f0">
-        <option value="">Carregando...</option>
-      </select>
-      <div style="margin-top:12px;font-size:13px;color:#94a3b8">Local (opcional)</div>
-      <select id="locationSelect" style="width:100%;margin-top:6px;padding:10px;border-radius:10px;border:1px solid #334155;background:#0b1220;color:#e2e8f0">
-        <option value="">Nenhum local</option>
-      </select>
-      <div class="modalActions">
-        <button class="btn" onclick="hideLinkUnitModal()">Cancelar</button>
-        <button class="btn" onclick="saveLinkUnit()">Salvar</button>
+        <a href="/logout" style="color:#f87171">Sair</a>
       </div>
     </div>
   </div>
-
-  <!-- Modal Renomear -->
-  <div id="modal" class="modal" onclick="hideModal()">
-    <div class="modalBox" onclick="event.stopPropagation()">
-      <h3 class="modalTitle">Renomear (apelido)</h3>
-      <div class="small" id="modalSub"></div>
-      <input id="aliasInput" placeholder="Ex: Recepção, Financeiro..." style="width:100%;margin-top:10px" />
-      <div class="modalActions">
-        <button class="btn" onclick="hideModal()">Cancelar</button>
-        <button class="btn" onclick="saveAlias()">Salvar</button>
-      </div>
-    </div>
+</div>
+<div class="stats-bar">
+  <div class="stat-chip">Total: <span class="num" id="totalCount">0</span></div>
+  <div class="stat-chip" style="color:#22c55e">Online: <span class="num" id="onlineCount">0</span></div>
+  <div class="stat-chip" style="color:#f59e0b">Offline: <span class="num" id="offlineCount">0</span></div>
+</div>
+<div id="grid" class="grid"></div>
+<div id="linkUnitModal" class="modal" onclick="hideLinkUnitModal()">
+  <div class="modalBox" onclick="event.stopPropagation()">
+    <h3 class="modalTitle">Vincular a Unidade</h3>
+    <div class="modalSub" id="linkUnitSub"></div>
+    <div class="form-group"><label class="form-label">Unidade</label><select id="unitSelect" onchange="onUnitChange()" class="form-select"><option value="">Carregando...</option></select></div>
+    <div class="form-group"><label class="form-label">Local (opcional)</label><select id="locationSelect" class="form-select"><option value="">Nenhum local</option></select></div>
+    <div class="modalActions"><button class="btn" onclick="hideLinkUnitModal()">Cancelar</button><button class="btn btn-primary" onclick="saveLinkUnit()">Salvar</button></div>
   </div>
-
-<script>
+</div>
+<div id="modal" class="modal" onclick="hideModal()">
+  <div class="modalBox" onclick="event.stopPropagation()">
+    <h3 class="modalTitle">Renomear PC</h3>
+    <div class="modalSub" id="modalSub"></div>
+    <div class="form-group"><label class="form-label">Apelido</label><input id="aliasInput" class="form-input" placeholder="Ex: Recepcao, Financeiro..." /></div>
+    <div class="modalActions"><button class="btn" onclick="hideModal()">Cancelar</button><button class="btn btn-primary" onclick="saveAlias()">Salvar</button></div>
+  </div>
+</div><script>
 let pcs = [];
 let editing = { agent_id: null, hostname: null };
-
-function safe(v){ return (v===undefined||v===null) ? "" : String(v); }
-
-function lastSeenMs(iso){
-  if(!iso) return 0;
-  const d = new Date(iso);
-  const t = d.getTime();
-  return isNaN(t) ? 0 : t;
-}
-
-function isOnline(pc){
-  const t = lastSeenMs(pc._last_seen);
-  if(!t) return false;
-  return (Date.now() - t) <= 3*60*1000;
-}
-
-async function load(){
-  const res = await fetch("/dados");
-  pcs = await res.json();
-  render();
-}
-
+function safe(v){ return (v===undefined||v===null) ? '' : String(v); }
+function lastSeenMs(iso){ if(!iso) return 0; const d = new Date(iso); return isNaN(d.getTime()) ? 0 : d.getTime(); }
+function isOnline(pc){ const t = lastSeenMs(pc._last_seen); return t && (Date.now() - t) <= 3*60*1000; }
+async function load(){ const res = await fetch('/dados'); pcs = await res.json(); render(); }
 function render(){
-  const q = document.getElementById("q").value.toLowerCase().trim();
-  const grid = document.getElementById("grid");
-
+  const q = document.getElementById('q').value.toLowerCase().trim();
+  const grid = document.getElementById('grid');
   const filtered = pcs.filter(pc => {
-    const alias = safe(pc._alias).toLowerCase();
-    const host = safe(pc.hostname).toLowerCase();
-    const serial = safe(pc.serial).toLowerCase();
-    const ip = safe(pc.network?.ip).toLowerCase();
-    const tag = safe(pc._tag_evo).toLowerCase();
-    return !q || alias.includes(q) || host.includes(q) || serial.includes(q) || ip.includes(q) || tag.includes(q);
+    const s = [pc._alias, pc.hostname, pc.serial, pc.network?.ip, pc._tag_evo].map(x => safe(x).toLowerCase());
+    return !q || s.some(v => v.includes(q));
   });
-
-  document.getElementById("count").innerText = `${filtered.length} PCs`;
-
+  document.getElementById('totalCount').textContent = pcs.length;
+  document.getElementById('onlineCount').textContent = pcs.filter(isOnline).length;
+  document.getElementById('offlineCount').textContent = pcs.filter(pc => !isOnline(pc)).length;
   grid.innerHTML = filtered.map(pc => {
-    const agent_id = safe(pc._agent_id);
+    const aid = safe(pc._agent_id);
     const alias = safe(pc._alias);
     const host = safe(pc.hostname);
     const tag = safe(pc._tag_evo);
-    const showName = alias ? `${alias} (${host})` : host;
-
-    const status = isOnline(pc) ? `<span class="online">● Online</span>` : `<span class="offline">● Offline</span>`;
+    const showName = alias || host;
+    const status = isOnline(pc) ? '<span class="online">&#9679; Online</span>' : '<span class="offline">&#9679; Offline</span>';
     const ip = safe(pc.network?.ip);
     const user = safe(pc.windows_user);
-    const unitName = pc.unit_name || "Sem unidade";
-
-    return `
-      <div class="card">
-        <div class="row">
-          <div>
-            <div class="title">${tag ? tag + " • " : ""}${showName}</div>
-            <div class="muted">${status} • IP: ${ip || "N/A"} • Usuário: ${user || "N/A"}</div>
-            <div class="small">Unidade: ${unitName}${pc.location_name ? ' • ' + pc.location_name : ''}</div>
-          </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn" onclick="openAlias('${agent_id}','${host}')">Renomear</button>
-            <button class="btn" onclick="openLinkUnit('${agent_id}','${host}')">Vincular Local</button>
-            <button class="btn danger" onclick="deletePc('${agent_id}')">Excluir</button>
-            <a class="btn" href="/pc/${encodeURIComponent(agent_id)}">Detalhes</a>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join("");
+    const unitName = pc.unit_name || 'Sem unidade';
+    return '<div class="card"><div class="row"><div><div class="title">' + (tag ? '<span class="tag-badge">'+tag+'</span> ' : '') + showName + '</div><div class="muted">' + status + ' &bull; IP: ' + (ip || 'N/A') + ' &bull; User: ' + (user || 'N/A') + '</div><div class="small">' + unitName + (pc.location_name ? ' &bull; '+pc.location_name : '') + '</div></div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" onclick="openAlias(&apos;'+aid+'&apos;,&apos;'+host+'&apos;)">Renomear</button><button class="btn" onclick="openLinkUnit(&apos;'+aid+'&apos;,&apos;'+host+'&apos;)">Vincular</button><button class="btn btn-danger" onclick="deletePc(&apos;'+aid+'&apos;)">Excluir</button><a class="btn" href="/pc/'+encodeURIComponent(aid)+'">Detalhes</a></div></div></div>';
+  }).join('');
 }
-
-function openAlias(agent_id, hostname){
-  editing = { agent_id, hostname };
-  document.getElementById("modalSub").innerText = `PC: ${hostname}`;
-  document.getElementById("aliasInput").value = "";
-  document.getElementById("modal").style.display = "flex";
-}
-
-function hideModal(){
-  document.getElementById("modal").style.display = "none";
-}
-
-async function saveAlias(){
-  const alias = document.getElementById("aliasInput").value.trim();
-  const res = await fetch("/api/alias", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({ agent_id: editing.agent_id, alias })
-  });
-  if(!res.ok){ alert("Erro ao salvar"); return; }
-  hideModal();
-  await load();
-}
-
-async function deletePc(agent_id){
-  const ok = confirm("Tem certeza que deseja excluir este computador?");
-  if(!ok) return;
-
-  const res = await fetch(`/pc/${encodeURIComponent(agent_id)}/delete`, { method:"POST" });
-  if(!res.ok){ alert("Erro ao excluir"); return; }
-  await load();
-}
-
-// Link Unit modal
-let linkingAgentId = null;
-let allUnits = [];
-let allLocations = [];
-
-async function loadLocations() {
-  const res = await fetch('/api/locations');
-  allLocations = await res.json();
-}
-
-async function loadUnits() {
-  const res = await fetch("/api/units");
-  allUnits = await res.json();
-}
-
-function openLinkUnit(agent_id, hostname) {
-  linkingAgentId = agent_id;
-  Promise.all([loadUnits(), loadLocations()]).then(() => {
-    const pc = pcs.find(p => p._agent_id === agent_id);
-    const currentUnitId = pc ? pc.unit_id : null;
-    const currentLocId = pc ? pc.location_id : null;
-    const select = document.getElementById("unitSelect");
-    select.innerHTML = '<option value="">Nenhuma unidade</option>';
-    allUnits.forEach(u => {
-      const selected = currentUnitId == u.unit_id ? "selected" : "";
-      select.innerHTML += `<option value="${u.unit_id}" ${selected}>${u.name}</option>`;
-    });
-    onUnitChange(currentLocId);
-    document.getElementById("linkUnitSub").innerText = `PC: ${hostname}`;
-    document.getElementById("linkUnitModal").style.display = "flex";
-  });
-}
-
-function onUnitChange(preselectLocId) {
-  const unitId = document.getElementById("unitSelect").value;
-  const locSelect = document.getElementById("locationSelect");
-  locSelect.innerHTML = '<option value="">Nenhum local</option>';
-  if (!unitId || !allLocations) return;
-  allLocations.filter(l => l.unit_id == unitId).forEach(l => {
-    const selected = preselectLocId && preselectLocId == l.location_id ? "selected" : "";
-    locSelect.innerHTML += `<option value="${l.location_id}" ${selected}>${l.name}</option>`;
-  });
-}
-
-function hideLinkUnitModal() {
-  document.getElementById("linkUnitModal").style.display = "none";
-}
-
-async function saveLinkUnit() {
-  const unitId = document.getElementById("unitSelect").value;
-  const locId = document.getElementById("locationSelect").value;
-  const body = unitId ? { unit_id: parseInt(unitId) } : {};
-  const res = await fetch(`/api/computers/${linkingAgentId}/unit`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) { alert("Erro ao salvar unidade"); return; }
-  const body2 = locId ? { location_id: parseInt(locId) } : {};
-  const res2 = await fetch(`/api/computers/${linkingAgentId}/location`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(body2)
-  });
-  if (!res2.ok) { alert("Erro ao salvar local"); return; }
-  hideLinkUnitModal();
-  await load();
-}
-
-document.addEventListener('click', function(e) {
-  var menu = document.getElementById('menuDrop');
-  var btn = document.querySelector('.menu-btn');
-  if (menu && !menu.contains(e.target) && !btn.contains(e.target)) {
-    menu.classList.remove('show');
-  }
-});
-setInterval(load, 5000);
-load();
-</script>
+function openAlias(aid,host){ editing={agent_id:aid,hostname:host}; document.getElementById('modalSub').textContent='PC: '+host; document.getElementById('aliasInput').value=''; document.getElementById('modal').style.display='flex'; }
+function hideModal(){ document.getElementById('modal').style.display='none'; }
+async function saveAlias(){ const alias=document.getElementById('aliasInput').value.trim(); await fetch('/api/alias',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent_id:editing.agent_id,alias})}); hideModal(); await load(); }
+async function deletePc(aid){ if(!confirm('Excluir este computador?')) return; await fetch('/pc/'+encodeURIComponent(aid)+'/delete',{method:'POST'}); await load(); }
+let linkingAgentId=null,allUnits=[],allLocations=[];
+async function loadLocations(){ allLocations=await(await fetch('/api/locations')).json(); }
+async function loadUnits(){ allUnits=await(await fetch('/api/units')).json(); }
+function openLinkUnit(aid,host){ linkingAgentId=aid; Promise.all([loadUnits(),loadLocations()]).then(()=>{const pc=pcs.find(p=>p._agent_id===aid);const cur=pc?pc.unit_id:null;const curL=pc?pc.location_id:null;const sel=document.getElementById('unitSelect');sel.innerHTML='<option value="">Nenhuma unidade</option>';allUnits.forEach(u=>{sel.innerHTML+='<option value="'+u.unit_id+'" '+(cur==u.unit_id?'selected':'')+'>'+u.name+'</option>'});onUnitChange(curL);document.getElementById('linkUnitSub').textContent='PC: '+host;document.getElementById('linkUnitModal').style.display='flex'}); }
+function onUnitChange(preselect){const uid=document.getElementById('unitSelect').value;const ls=document.getElementById('locationSelect');ls.innerHTML='<option value="">Nenhum local</option>';if(!uid||!allLocations)return;allLocations.filter(l=>l.unit_id==uid).forEach(l=>{ls.innerHTML+='<option value="'+l.location_id+'" '+(preselect&&preselect==l.location_id?'selected':'')+'>'+l.name+'</option>'});}
+function hideLinkUnitModal(){document.getElementById('linkUnitModal').style.display='none'}
+async function saveLinkUnit(){const uid=document.getElementById('unitSelect').value;const lid=document.getElementById('locationSelect').value;if(uid){await fetch('/api/computers/'+linkingAgentId+'/unit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unit_id:parseInt(uid)})});}const body2=lid?{location_id:parseInt(lid)}:{};await fetch('/api/computers/'+linkingAgentId+'/location',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body2)});hideLinkUnitModal();await load();}
+document.addEventListener('click',e=>{const m=document.getElementById('menuDrop'),b=document.querySelector('.menu-btn');if(m&&!m.contains(e.target)&&!b.contains(e.target))m.classList.remove('show')});
+setInterval(load,5000);load();</script>
 </body>
 </html>
