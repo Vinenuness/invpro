@@ -182,7 +182,20 @@ def init_db():
             );
             
             CREATE INDEX IF NOT EXISTS idx_locations_unit ON locations(unit_id);
-            CREATE INDEX IF NOT EXISTS idx_computers_last_seen ON computers(last_seen);
+            
+            CREATE TABLE IF NOT EXISTS alerts (
+                alert_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id INTEGER NOT NULL DEFAULT 1,
+                agent_id TEXT NOT NULL,
+                alert_type TEXT NOT NULL,
+                message TEXT NOT NULL,
+                is_read INTEGER DEFAULT 0,
+                created_at TEXT,
+                FOREIGN KEY (agent_id) REFERENCES computers(agent_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_alerts_tenant ON alerts(tenant_id);
+            CREATE INDEX IF NOT EXISTS idx_alerts_read ON alerts(is_read);
+CREATE INDEX IF NOT EXISTS idx_computers_last_seen ON computers(last_seen);
         """)
         conn.commit()
     
@@ -279,11 +292,18 @@ def require_agent_token(f):
 
 
 def require_login(f):
-    """Decorator para login obrigatório"""
+    """Decorator para login obrigatório com timeout de sessão"""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get("logged_in"):
             return redirect(url_for("login_page"))
+        # Session timeout: 30 minutes
+        from time import time
+        last_activity = session.get("last_activity", 0)
+        if time() - last_activity > 1800:  # 30 min
+            session.clear()
+            return redirect(url_for("login_page"))
+        session["last_activity"] = time()
         return f(*args, **kwargs)
     return decorated
 
@@ -334,7 +354,7 @@ def health():
 
 
 @app.route("/login", methods=["GET", "POST"])
-@limiter.limit("10 per minute") if limiter else lambda f: f
+@limiter.limit("5 per minute") if limiter else lambda f: f
 def login_page():
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
@@ -343,6 +363,8 @@ def login_page():
             session["logged_in"] = True
             session["user"] = username
             session["tenant_id"] = 1  # Default tenant
+            from time import time
+            session["last_activity"] = time()
             logger.info(f"Login bem-sucedido: {username}")
             return redirect(url_for("index"))
         
@@ -354,11 +376,25 @@ def login_page():
             ).fetchone()
             if user:
                 import hashlib
-                if hashlib.sha256(password.encode()).hexdigest() == user["password_hash"]:
+                try:
+                    is_valid = bcrypt.checkpw(password.encode(), user["password_hash"].encode())
+                except Exception:
+                    # Fallback: old SHA256 hash
+                    import hashlib
+                    is_valid = hashlib.sha256(password.encode()).hexdigest() == user["password_hash"]
+                if is_valid:
                     session["logged_in"] = True
                     session["user"] = username
                     session["user_id"] = user["user_id"]
                     session["tenant_id"] = user["tenant_id"]
+                    from time import time
+                    session["last_activity"] = time()
+                    # Migrate old SHA256 hash to bcrypt
+                    if not user["password_hash"].startswith("$2"):
+                        new_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+                        with get_db() as migrate_conn:
+                            migrate_conn.execute("UPDATE users SET password_hash = ? WHERE user_id = ?", (new_hash, user["user_id"]))
+                            migrate_conn.commit()
                     logger.info(f"Login bem-sucedido: {username} (tenant {user['tenant_id']})")
                     return redirect(url_for("index"))
         logger.warning(f"Tentativa de login falhou: {username}")
@@ -868,7 +904,7 @@ def api_users_create():
     is_admin = 1 if data.get("is_admin") else 0
     if not username or not email or not password:
         return jsonify({"error": "username, email and password are required"}), 400
-    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     now = utc_now_iso()
     with get_db() as conn:
         try:
@@ -1161,6 +1197,94 @@ def api_dashboard():
             "os_distribution": os_stats
         })
 
+
+
+
+# ================================
+# API - OFFLINE ALERTS
+# ================================
+@app.route("/api/alerts", methods=["GET"])
+@require_login
+def api_alerts_list():
+    tid = get_current_tenant()
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT a.*, c.hostname, c.tag_evo 
+               FROM alerts a 
+               LEFT JOIN computers c ON a.agent_id = c.agent_id
+               WHERE a.tenant_id = ? 
+               ORDER BY a.created_at DESC LIMIT 50""",
+            (tid,)
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/alerts/unread-count", methods=["GET"])
+@require_login
+def api_alerts_unread_count():
+    tid = get_current_tenant()
+    with get_db() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) as cnt FROM alerts WHERE tenant_id = ? AND is_read = 0",
+            (tid,)
+        ).fetchone()["cnt"]
+    return jsonify({"count": count})
+
+
+@app.route("/api/alerts/mark-read", methods=["POST"])
+@require_login
+def api_alerts_mark_read():
+    tid = get_current_tenant()
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE alerts SET is_read = 1 WHERE tenant_id = ? AND is_read = 0",
+            (tid,)
+        )
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/alerts/check-offline", methods=["POST"])
+@require_login
+def api_alerts_check_offline():
+    """Check for offline PCs and create alerts"""
+    from datetime import timedelta
+    tid = get_current_tenant()
+    threshold_minutes = int(request.json.get("threshold_minutes", 60)) if request.is_json else 60
+    now = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(minutes=threshold_minutes)).isoformat()
+    
+    with get_db() as conn:
+        # Find PCs not seen within threshold
+        offline_pcs = conn.execute(
+            """SELECT agent_id, hostname, tag_evo, last_seen 
+               FROM computers 
+               WHERE tenant_id = ? AND (last_seen IS NULL OR last_seen < ?)""",
+            (tid, cutoff)
+        ).fetchall()
+        
+        alerts_created = 0
+        for pc in offline_pcs:
+            # Check if alert already exists for this PC
+            existing = conn.execute(
+                """SELECT alert_id FROM alerts 
+                   WHERE agent_id = ? AND is_read = 0 AND alert_type = 'offline'""",
+                (pc["agent_id"],)
+            ).fetchone()
+            
+            if not existing:
+                conn.execute(
+                    """INSERT INTO alerts (tenant_id, agent_id, alert_type, message, created_at) 
+                       VALUES (?, ?, 'offline', ?, ?)""",
+                    (tid, pc["agent_id"], 
+                     f"PC {pc['hostname'] or pc['agent_id']} está offline desde {pc['last_seen'] or 'desconhecido'}",
+                     now.isoformat())
+                )
+                alerts_created += 1
+        
+        conn.commit()
+    
+    return jsonify({"ok": True, "alerts_created": alerts_created, "offline_count": len(offline_pcs)})
 
 # ================================
 # API - EXPORT CSV

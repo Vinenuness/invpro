@@ -330,6 +330,112 @@ def get_anydesk_id_best_effort():
     return None
 
 
+
+def get_process_count():
+    """Get count of running processes"""
+    try:
+        return len(psutil.pids())
+    except:
+        return None
+
+def get_network_stats():
+    """Get network I/O statistics"""
+    try:
+        net = psutil.net_io_counters()
+        return {
+            "bytes_sent": net.bytes_sent,
+            "bytes_recv": net.bytes_recv,
+            "packets_sent": net.packets_sent,
+            "packets_recv": net.packets_recv
+        }
+    except:
+        return {}
+
+def get_cpu_percent():
+    """Get current CPU usage percentage"""
+    try:
+        return psutil.cpu_percent(interval=1)
+    except:
+        return None
+
+def get_ram_percent():
+    """Get current RAM usage percentage"""
+    try:
+        return psutil.virtual_memory().percent
+    except:
+        return None
+
+def get_disk_io():
+    """Get disk I/O statistics"""
+    try:
+        disk = psutil.disk_io_counters()
+        return {
+            "read_bytes": disk.read_bytes,
+            "write_bytes": disk.write_bytes,
+            "read_count": disk.read_count,
+            "write_count": disk.write_count
+        }
+    except:
+        return {}
+
+def get_battery_info():
+    """Get battery information (for laptops)"""
+    try:
+        bat = psutil.sensors_battery()
+        if bat:
+            return {
+                "percent": bat.percent,
+                "power_plugged": bat.power_plugged,
+                "seconds_left": bat.secsleft if bat.secsleft != psutil.POWER_TIME_UNLIMITED else None
+            }
+    except:
+        pass
+    return {}
+
+def install_as_service():
+    """Install agent as Windows service (requires admin)"""
+    import win32serviceutil
+    import win32service
+    import win32event
+    import servicemanager
+    
+    class AgentService(win32serviceutil.ServiceFramework):
+        _svc_name_ = "InvProAgent"
+        _svc_display_name_ = "InvPro Inventory Agent"
+        _svc_description_ = "Collects system inventory and reports to InvPro server"
+        
+        def __init__(self, args):
+            win32serviceutil.ServiceFramework.__init__(self, args)
+            self.stop_event = win32event.CreateEvent(None, 0, 0, None)
+        
+        def SvcStop(self):
+            self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+            win32event.SetEvent(self.stop_event)
+        
+        def SvcDoRun(self):
+            servicemanager.LogMsg(servicemanager.EVENTLOG_INFORMATION_TYPE,
+                                 servicemanager.PYS_SERVICE_STARTED,
+                                 (self._svc_name_, ''))
+            self.main()
+        
+        def main(self):
+            # Run the agent main loop
+            while True:
+                try:
+                    data = payload()
+                    headers = {"X-AGENT-TOKEN": AGENT_TOKEN}
+                    requests.post(API_URL, json=data, headers=headers, timeout=20)
+                except:
+                    pass
+                time.sleep(INTERVALO_SEG)
+    
+    if len(sys.argv) == 1:
+        servicemanager.Initialize()
+        servicemanager.PrepareToHostSingle(AgentService)
+        servicemanager.StartServiceCtrlDispatcher()
+    else:
+        win32serviceutil.HandleCommandLine(AgentService)
+
 def payload():
     hostname = socket.gethostname()
     ip = get_ip_best_effort()
@@ -350,6 +456,12 @@ def payload():
         "volumes": get_volumes(),
         "programas": get_installed_programs(limit=350),
         "monitores": get_monitores(),
+        "process_count": get_process_count(),
+        "network_stats": get_network_stats(),
+        "cpu_percent": get_cpu_percent(),
+        "ram_percent": get_ram_percent(),
+        "disk_io": get_disk_io(),
+        "battery": get_battery_info(),
         **get_os_info(),
     }
 

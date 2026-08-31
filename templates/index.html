@@ -85,7 +85,35 @@ a{color:#e2e8f0;text-decoration:none}
 .empty{text-align:center;padding:60px 20px;color:#475569}
 .empty svg{width:48px;height:48px;margin-bottom:12px;opacity:0.3}
 .empty p{font-size:14px}
-  </style>
+  
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .top-bar{padding:12px 16px;flex-wrap:wrap;gap:10px}
+  .search-wrap{order:3;flex:1;min-width:100%}
+  .search-input{width:100%}
+  .top-right{gap:8px}
+  .brand-text{font-size:16px}
+  .stats-bar{padding:12px 16px}
+  .stat-chip{padding:6px 10px;font-size:11px}
+  .stat-chip .num{font-size:12px}
+  .grid{grid-template-columns:1fr;padding:0 16px 16px}
+  .card{padding:14px}
+  .row{flex-direction:column;gap:10px}
+  .row>div:last-child{width:100%;display:flex;flex-wrap:wrap;gap:6px}
+  .row>div:last-child .btn{flex:1;justify-content:center;min-width:calc(50% - 3px)}
+  .menu-dropdown{right:-10px;min-width:180px}
+  .modalBox{margin:10px;max-width:calc(100% - 20px)}
+  .form-input,.form-select{font-size:16px} /* Prevent iOS zoom */
+}
+
+@media (max-width: 480px) {
+  .brand-sub{display:none}
+  .menu-btn span{display:none}
+  .stat-chip .num{font-size:11px}
+  .row>div:last-child .btn{min-width:100%}
+}
+
+</style>
 </head>
 <body>
 <div class="top-bar">
@@ -102,6 +130,7 @@ a{color:#e2e8f0;text-decoration:none}
       <button class="menu-btn" onclick="document.getElementById(&apos;menuDrop&apos;).classList.toggle(&apos;show&apos;)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
         Menu
+        <span id="alertBadge" style="display:none;background:#f87171;color:white;font-size:10px;padding:2px 6px;border-radius:10px;font-weight:700"></span>
       </button>
       <div id="menuDrop" class="menu-dropdown">
         <div class="menu-label">Navegacao</div>
@@ -180,6 +209,20 @@ function onUnitChange(preselect){const uid=document.getElementById('unitSelect')
 function hideLinkUnitModal(){document.getElementById('linkUnitModal').style.display='none'}
 async function saveLinkUnit(){const uid=document.getElementById('unitSelect').value;const lid=document.getElementById('locationSelect').value;if(uid){await fetch('/api/computers/'+linkingAgentId+'/unit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unit_id:parseInt(uid)})});}const body2=lid?{location_id:parseInt(lid)}:{};await fetch('/api/computers/'+linkingAgentId+'/location',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body2)});hideLinkUnitModal();await load();}
 document.addEventListener('click',e=>{const m=document.getElementById('menuDrop'),b=document.querySelector('.menu-btn');if(m&&!m.contains(e.target)&&!b.contains(e.target))m.classList.remove('show')});
-setInterval(load,5000);load();</script>
+// Load alerts count
+async function loadAlerts(){
+  try{
+    const res=await fetch('/api/alerts/unread-count');
+    const data=await res.json();
+    const badge=document.getElementById('alertBadge');
+    if(data.count>0){badge.textContent=data.count;badge.style.display='inline'}else{badge.style.display='none'}
+  }catch(e){}
+}
+// Check offline every 5 minutes
+async function checkOffline(){
+  try{await fetch('/api/alerts/check-offline',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({threshold_minutes:60})})}catch(e){}
+  loadAlerts();
+}
+setInterval(load,5000);load();loadAlerts();setInterval(checkOffline,300000);checkOffline();</script>
 </body>
 </html>

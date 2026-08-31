@@ -36,6 +36,29 @@ td{padding:10px 12px;border-bottom:1px solid #1e293b;font-size:13px}
 .badge-failed{background:#450a0a;color:#f87171}
 .export-bar{display:flex;gap:10px;align-items:center;margin-bottom:16px}
 .export-bar select{padding:8px 12px;border-radius:10px;border:1px solid #334155;background:#0b1220;color:#e2e8f0}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  body{padding:12px}
+  .top{flex-direction:column;align-items:stretch;gap:12px}
+  .left{flex-wrap:wrap}
+  .export-bar{flex-wrap:wrap}
+  .cards{grid-template-columns:repeat(2,1fr);gap:10px}
+  .card{padding:14px}
+  .card-value{font-size:24px}
+  .charts{grid-template-columns:1fr}
+  .chart-box{padding:14px}
+  table{font-size:12px}
+  th,td{padding:8px 6px}
+  .btn{padding:6px 10px;font-size:12px}
+}
+
+@media (max-width: 480px) {
+  .cards{grid-template-columns:1fr}
+  .card-value{font-size:28px}
+  h1{font-size:20px}
+}
+
 </style></head><body>
 <div class="top">
   <div class="left">
