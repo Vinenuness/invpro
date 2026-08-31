@@ -532,13 +532,117 @@ def open_file_or_folder(path: str):
             pass
 
 
+
+
+# =========================
+# AUTO-START (Windows Startup)
+# =========================
+REGISTRY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"
+AGENT_REG_NAME = "InvProAgent"
+
+def get_agent_path():
+    """Get the full path to this agent script"""
+    return os.path.abspath(__file__)
+
+def is_in_startup():
+    """Check if agent is in Windows startup"""
+    if winreg is None:
+        return False
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, 0, winreg.KEY_READ) as key:
+            val, _ = winreg.QueryValueEx(key, AGENT_REG_NAME)
+            return bool(val)
+    except:
+        return False
+
+def install_startup():
+    """Add agent to Windows startup (runs on login)"""
+    if winreg is None:
+        print("ERRO: winreg nao disponivel (so funciona no Windows)")
+        return False
+    
+    agent_path = get_agent_path()
+    # Use pythonw.exe to run without console window
+    python_dir = os.path.dirname(sys.executable)
+    pythonw = os.path.join(python_dir, "pythonw.exe")
+    if not os.path.exists(pythonw):
+        pythonw = sys.executable  # fallback to python.exe
+    
+    # Command to run: pythonw.exe agent.py --background
+    cmd = f'"{pythonw}" "{agent_path}" --background'
+    
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, 0, winreg.KEY_SET_VALUE) as key:
+            winreg.SetValueEx(key, AGENT_REG_NAME, 0, winreg.REG_SZ, cmd)
+        print(f"✅ Agente adicionado ao startup do Windows!")
+        print(f"   Comando: {cmd}")
+        print(f"   O agente iniciara automaticamente no proximo login.")
+        return True
+    except Exception as e:
+        print(f"❌ Erro ao adicionar ao startup: {e}")
+        return False
+
+def remove_startup():
+    """Remove agent from Windows startup"""
+    if winreg is None:
+        print("ERRO: winreg nao disponivel")
+        return False
+    
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, 0, winreg.KEY_SET_VALUE) as key:
+            winreg.DeleteValue(key, AGENT_REG_NAME)
+        print("✅ Agente removido do startup do Windows!")
+        return True
+    except FileNotFoundError:
+        print("⚠️  Agente nao estava no startup")
+        return True
+    except Exception as e:
+        print(f"❌ Erro ao remover do startup: {e}")
+        return False
+
+def run_background():
+    """Run agent in background mode (no console)"""
+    # Hide console window on Windows
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+            if hwnd:
+                ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE
+        except:
+            pass
+
 if __name__ == "__main__":
+    # Handle command line arguments
+    if len(sys.argv) > 1:
+        cmd = sys.argv[1].lower()
+        if cmd == "--install-startup" or cmd == "install":
+            install_startup()
+            sys.exit(0)
+        elif cmd == "--remove-startup" or cmd == "remove":
+            remove_startup()
+            sys.exit(0)
+        elif cmd == "--status":
+            status = "✅ Instalado" if is_in_startup() else "❌ Nao instalado"
+            print(f"Status do auto-start: {status}")
+            sys.exit(0)
+        elif cmd == "--background":
+            run_background()
+            # Continue to main loop
+    
     print("=" * 60)
     print("Agente de Inventario - Iniciando...")
     print("=" * 60)
     print(f"Servidor: {BASE_URL}")
     print(f"Token: {AGENT_TOKEN[:4]}{'*' * max(0, len(AGENT_TOKEN) - 4)}")
     print(f"Intervalo: {INTERVALO_SEG} segundos")
+    print()
+    
+    # Check auto-start status
+    if is_in_startup():
+        print("✅ Auto-start: Ativado")
+    else:
+        print("⚠️  Auto-start: Desativado (execute: python agente.py --install-startup)")
     print()
 
     # Testar conexao com o servidor
