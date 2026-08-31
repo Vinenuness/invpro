@@ -623,7 +623,7 @@ if __name__ == "__main__":
             remove_startup()
             sys.exit(0)
         elif cmd == "--status":
-            status = "✅ Instalado" if is_in_startup() else "❌ Nao instalado"
+            status = "[OK] Instalado" if is_in_startup() else "[X] Nao instalado"
             print(f"Status do auto-start: {status}")
             sys.exit(0)
         elif cmd == "--background":
@@ -640,9 +640,9 @@ if __name__ == "__main__":
     
     # Check auto-start status
     if is_in_startup():
-        print("✅ Auto-start: Ativado")
+        print("[OK] Auto-start: Ativado")
     else:
-        print("⚠️  Auto-start: Desativado (execute: python agente.py --install-startup)")
+        print("[!] Auto-start: Desativado (execute: python agente.py --install-startup)")
     print()
 
     # Testar conexao com o servidor

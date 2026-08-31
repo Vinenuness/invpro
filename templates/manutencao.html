@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manutencao - InvPro</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Inter,sans-serif;background:#0a0e1a;color:#e2e8f0;min-height:100vh}
+.header{background:rgba(15,23,42,0.95);border-bottom:1px solid rgba(51,65,85,0.3);padding:16px 24px;display:flex;align-items:center;gap:16px}
+.header h1{font-size:20px;font-weight:700}
+.back{color:#38bdf8;text-decoration:none;font-size:14px}
+.content{padding:24px}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:24px}
+.stat{background:rgba(30,41,59,0.5);border:1px solid rgba(51,65,85,0.3);border-radius:14px;padding:18px}
+.stat-label{font-size:12px;color:#94a3b8;margin-bottom:6px}
+.stat-value{font-size:28px;font-weight:800}
+.stat-value.critical{color:#ef4444}
+.stat-value.warning{color:#f59e0b}
+.stat-value.ok{color:#22c55e}
+.alerts{display:flex;flex-direction:column;gap:12px}
+.alert{background:rgba(30,41,59,0.5);border:1px solid rgba(51,65,85,0.3);border-radius:14px;padding:16px;display:flex;justify-content:space-between;align-items:center}
+.alert.critical{border-left:4px solid #ef4444}
+.alert.warning{border-left:4px solid #f59e0b}
+.alert.resolved{opacity:0.5}
+.alert-info{flex:1}
+.alert-title{font-weight:600;margin-bottom:4px}
+.alert-meta{font-size:12px;color:#94a3b8}
+.btn{border:1px solid rgba(51,65,85,0.4);background:rgba(15,23,42,0.6);color:#cbd5e1;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-family:inherit;font-weight:500;transition:all 0.15s}
+.btn:hover{background:rgba(56,189,248,0.1);border-color:rgba(56,189,248,0.3);color:#38bdf8}
+.btn-success{background:rgba(34,197,94,0.2);border-color:rgba(34,197,94,0.3);color:#22c55e}
+.btn-success:hover{background:rgba(34,197,94,0.3)}
+.badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600}
+.badge-critical{background:rgba(239,68,68,0.2);color:#f87171}
+.badge-warning{background:rgba(245,158,11,0.2);color:#fbbf24}
+.empty{text-align:center;padding:60px;color:#475569}
+.section-title{font-weight:700;font-size:16px;margin-bottom:16px}
+@media(max-width:768px){.stats{grid-template-columns:1fr 1fr}.alert{flex-direction:column;gap:10px;align-items:stretch}}
+  </style>
+</head>
+<body>
+<div class="header">
+  <a href="/" class="back">&#8592; Voltar</a>
+  <h1>Manutencao Preventiva</h1>
+</div>
+<div class="content">
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Total Alertas</div><div class="stat-value" id="totalAlerts">-</div></div>
+    <div class="stat"><div class="stat-label">Criticos</div><div class="stat-value critical" id="criticalCount">-</div></div>
+    <div class="stat"><div class="stat-label">Warnings</div><div class="stat-value warning" id="warningCount">-</div></div>
+    <div class="stat"><div class="stat-label">Resolvidos</div><div class="stat-value ok" id="resolvedCount">-</div></div>
+  </div>
+  <div class="section-title">Alertas Ativos</div>
+  <div id="alertsList" class="alerts"></div>
+</div>
+<script>
+async function load(){
+  const res=await fetch("/api/maintenance");
+  const alerts=await res.json();
+  const active=alerts.filter(a=>!a.is_resolved);
+  const resolved=alerts.filter(a=>a.is_resolved);
+  document.getElementById("totalAlerts").textContent=alerts.length;
+  document.getElementById("criticalCount").textContent=active.filter(a=>a.severity==="critical").length;
+  document.getElementById("warningCount").textContent=active.filter(a=>a.severity==="warning").length;
+  document.getElementById("resolvedCount").textContent=resolved.length;
+  
+  const list=document.getElementById("alertsList");
+  if(!active.length){list.innerHTML='<div class="empty">Nenhum alerta ativo</div>';return;}
+  list.innerHTML=active.map(a=>`<div class="alert ${a.severity}">
+    <div class="alert-info">
+      <div class="alert-title">${a.hostname||a.agent_id} - ${a.alert_type}</div>
+      <div class="alert-meta">${a.message} | ${a.created_at?new Date(a.created_at).toLocaleString("pt-BR"):""}</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="badge badge-${a.severity}">${a.severity}</span>
+      <button class="btn btn-success" onclick="resolve(${a.alert_id})">Resolver</button>
+    </div>
+  </div>`).join("");
+}
+async function resolve(id){
+  await fetch("/api/maintenance/"+id+"/resolve",{method:"POST"});
+  load();
+}
+load();
+</script>
+</body>
+</html>

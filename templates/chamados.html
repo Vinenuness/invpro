@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chamados - InvPro</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Inter,sans-serif;background:#0a0e1a;color:#e2e8f0;min-height:100vh}
+.header{background:rgba(15,23,42,0.95);border-bottom:1px solid rgba(51,65,85,0.3);padding:16px 24px;display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:20px;font-weight:700}
+.header-left{display:flex;align-items:center;gap:16px}
+.back{color:#38bdf8;text-decoration:none;font-size:14px}
+.content{padding:24px}
+.filters{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+.filter{padding:8px 16px;border-radius:20px;border:1px solid rgba(51,65,85,0.4);background:rgba(15,23,42,0.6);color:#94a3b8;cursor:pointer;font-size:12px;font-family:inherit;transition:all 0.15s}
+.filter.active{background:rgba(56,189,248,0.2);border-color:#38bdf8;color:#38bdf8}
+.tickets{display:flex;flex-direction:column;gap:12px}
+.ticket{background:rgba(30,41,59,0.5);border:1px solid rgba(51,65,85,0.3);border-radius:14px;padding:16px}
+.ticket-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.ticket-title{font-weight:600;font-size:15px}
+.ticket-meta{font-size:12px;color:#94a3b8;margin-bottom:8px}
+.badges{display:flex;gap:8px}
+.badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600}
+.badge-open{background:rgba(56,189,248,0.2);color:#38bdf8}
+.badge-in_progress{background:rgba(245,158,11,0.2);color:#fbbf24}
+.badge-closed{background:rgba(34,197,94,0.2);color:#22c55e}
+.badge-low{background:rgba(100,116,139,0.2);color:#94a3b8}
+.badge-medium{background:rgba(245,158,11,0.2);color:#fbbf24}
+.badge-high{background:rgba(239,68,68,0.2);color:#f87171}
+.btn{border:1px solid rgba(51,65,85,0.4);background:rgba(15,23,42,0.6);color:#cbd5e1;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-family:inherit;font-weight:500;transition:all 0.15s}
+.btn:hover{background:rgba(56,189,248,0.1);border-color:rgba(56,189,248,0.3);color:#38bdf8}
+.btn-primary{background:linear-gradient(135deg,#38bdf8,#818cf8);border:none;color:white}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:20px;z-index:100}
+.modalBox{width:100%;max-width:500px;background:rgba(15,23,42,0.98);border:1px solid rgba(51,65,85,0.4);border-radius:18px;padding:24px}
+.modalTitle{font-weight:700;font-size:18px;margin-bottom:16px}
+.form-group{margin-bottom:14px}
+.form-label{display:block;font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:6px;text-transform:uppercase}
+.form-input,.form-select,.form-textarea{width:100%;padding:11px 14px;border-radius:10px;border:1px solid rgba(51,65,85,0.4);background:rgba(15,23,42,0.6);color:#f8fafc;font-size:13px;font-family:inherit}
+.form-textarea{min-height:80px;resize:vertical}
+.modalActions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+.empty{text-align:center;padding:60px;color:#475569}
+  </style>
+</head>
+<body>
+<div class="header">
+  <div class="header-left"><a href="/" class="back">&#8592; Voltar</a><h1>Chamados</h1></div>
+  <button class="btn btn-primary" onclick="openModal()">+ Novo Chamado</button>
+</div>
+<div class="content">
+  <div class="filters">
+    <button class="filter active" onclick="filterStatus('')">Todos</button>
+    <button class="filter" onclick="filterStatus('open')">Abertos</button>
+    <button class="filter" onclick="filterStatus('in_progress')">Em Andamento</button>
+    <button class="filter" onclick="filterStatus('closed')">Fechados</button>
+  </div>
+  <div id="ticketsList" class="tickets"></div>
+</div>
+<div id="modal" class="modal" onclick="closeModal()">
+  <div class="modalBox" onclick="event.stopPropagation()">
+    <h3 class="modalTitle">Novo Chamado</h3>
+    <div class="form-group"><label class="form-label">Titulo</label><input id="title" class="form-input" /></div>
+    <div class="form-group"><label class="form-label">Descricao</label><textarea id="desc" class="form-textarea"></textarea></div>
+    <div class="form-group"><label class="form-label">PC</label><select id="pcSelect" class="form-select"><option value="">Nenhum</option></select></div>
+    <div class="form-group"><label class="form-label">Prioridade</label><select id="priority" class="form-select"><option value="low">Baixa</option><option value="medium" selected>Media</option><option value="high">Alta</option></select></div>
+    <div class="modalActions"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveTicket()">Criar</button></div>
+  </div>
+</div>
+<script>
+let currentFilter="";
+async function load(){
+  const url=currentFilter?"/api/tickets?status="+currentFilter:"/api/tickets";
+  const res=await fetch(url);
+  const tickets=await res.json();
+  const list=document.getElementById("ticketsList");
+  if(!tickets.length){list.innerHTML="<div class=empty>Nenhum chamado</div>";return;}
+  list.innerHTML=tickets.map(t=>{
+    const sl={open:"Aberto",in_progress:"Em Andamento",closed:"Fechado"}[t.status]||t.status;
+    const pl={low:"Baixa",medium:"Media",high:"Alta"}[t.priority]||t.priority;
+    return "<div class=ticket><div class=ticket-header><div class=ticket-title>"+t.title+"</div><div class=badges><span class=badge badge-"+t.status+">"+sl+"</span><span class=badge badge-"+t.priority+">"+pl+"</span></div></div><div class=ticket-meta>PC: "+(t.hostname||"N/A")+" | "+(t.created_at?new Date(t.created_at).toLocaleString("pt-BR"):"")+"</div>"+(t.description?"<div style=font-size:13px;margin:8px 0>"+t.description+"</div>"":"")+"<div style=display:flex;gap:8px;margin-top:8px>"+(t.status==="open"?"<button class=btn onclick=updateStatus("+t.ticket_id+",'in_progress')>Iniciar</button>"":"")+(t.status==="in_progress"?"<button class=btn onclick=updateStatus("+t.ticket_id+",'closed')>Fechar</button>"":"")+(t.status!=="closed"?"<button class=btn onclick=deleteTicket("+t.ticket_id+") style=color:#f87171>Excluir</button>"":"")+"</div></div>";
+  }).join("");
+}
+function filterStatus(s){currentFilter=s;document.querySelectorAll(".filter").forEach(f=>f.classList.remove("active"));event.target.classList.add("active");load();}
+function openModal(){document.getElementById("modal").style.display="flex";loadPCs();}
+function closeModal(){document.getElementById("modal").style.display="none";}
+async function loadPCs(){const r=await fetch("/api/computers");const d=await r.json();const s=document.getElementById("pcSelect");s.innerHTML="<option value=''>Nenhum</option>"+(d.computers||[]).map(p=>"<option value='"+p.agent_id+"'>"+(p.hostname||p.agent_id)+"</option>").join("");}
+async function saveTicket(){const t=document.getElementById("title").value.trim();const d=document.getElementById("desc").value.trim();const a=document.getElementById("pcSelect").value||null;const p=document.getElementById("priority").value;if(!t){alert("Titulo obrigatorio");return;}await fetch("/api/tickets",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:t,description:d,agent_id:a,priority:p})});closeModal();load();}
+async function updateStatus(id,s){await fetch("/api/tickets/"+id,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:s})});load();}
+async function deleteTicket(id){if(!confirm("Excluir?"))return;await fetch("/api/tickets/"+id,{method:"DELETE"});load();}
+load();
+</script>
+</body></html>
