@@ -214,6 +214,27 @@ def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_tickets_tenant ON tickets(tenant_id);
             CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
+            CREATE TABLE IF NOT EXISTS ticket_history (
+                history_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_id INTEGER NOT NULL,
+                action TEXT NOT NULL,
+                old_value TEXT,
+                new_value TEXT,
+                performed_by TEXT,
+                created_at TEXT,
+                FOREIGN KEY (ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_ticket_history_ticket ON ticket_history(ticket_id);
+            CREATE TABLE IF NOT EXISTS ticket_notes (
+                note_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_id INTEGER NOT NULL,
+                author TEXT NOT NULL,
+                content TEXT NOT NULL,
+                is_internal INTEGER DEFAULT 0,
+                created_at TEXT,
+                FOREIGN KEY (ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_ticket_notes_ticket ON ticket_notes(ticket_id);
             
             CREATE TABLE IF NOT EXISTS maintenance_alerts (
                 alert_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -276,6 +297,26 @@ CREATE INDEX IF NOT EXISTS idx_computers_last_seen ON computers(last_seen);
             conn.commit()
             logger.info("Default tenant created")
     logger.info("Banco de dados inicializado")
+
+
+def migrate_db():
+    """Adiciona colunas novas que podem nao existir"""
+    try:
+        with get_db() as conn:
+            for stmt in [
+                'ALTER TABLE tickets ADD COLUMN resolution_notes TEXT',
+                'ALTER TABLE tickets ADD COLUMN category TEXT DEFAULT ' + chr(39) + 'other' + chr(39),
+                'ALTER TABLE tickets ADD COLUMN first_response_at TEXT',
+                'ALTER TABLE tickets ADD COLUMN resolved_at TEXT',
+                'ALTER TABLE tickets ADD COLUMN sla_due TEXT',
+            ]:
+                try:
+                    conn.execute(stmt)
+                except:
+                    pass
+            conn.commit()
+    except:
+        pass
 
 
 def backup_db():
@@ -1706,6 +1747,229 @@ def api_tickets_delete(ticket_id):
 
 
 # ================================
+# API - TICKETS - ENHANCED
+# ================================
+
+@app.route("/api/tickets/<int:ticket_id>/assign", methods=["POST"])
+@require_login
+def api_ticket_assign(ticket_id):
+    data = request.get_json(silent=True) or {}
+    assigned_to = (data.get("assigned_to") or "").strip()
+    now = utc_now_iso()
+    user = session.get("user", "system")
+    with get_db() as conn:
+        old = conn.execute("SELECT assigned_to FROM tickets WHERE ticket_id = ?", (ticket_id,)).fetchone()
+        old_val = old["assigned_to"] if old else None
+        conn.execute("UPDATE tickets SET assigned_to = ?, updated_at = ? WHERE ticket_id = ?", (assigned_to or None, now, ticket_id))
+        conn.execute("INSERT INTO ticket_history (ticket_id, action, old_value, new_value, performed_by, created_at) VALUES (?, 'assigned', ?, ?, ?, ?)",
+            (ticket_id, old_val, assigned_to or None, user, now))
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/tickets/<int:ticket_id>/start", methods=["POST"])
+@require_login
+def api_ticket_start(ticket_id):
+    data = request.get_json(silent=True) or {}
+    notes = (data.get('notes') or '').strip()
+    now = utc_now_iso()
+    user = session.get("user", "system")
+    with get_db() as conn:
+        conn.execute("UPDATE tickets SET status = 'in_progress', first_response_at = COALESCE(first_response_at, ?), updated_at = ? WHERE ticket_id = ?",
+            (now, now, ticket_id))
+        conn.execute("INSERT INTO ticket_history (ticket_id, action, old_value, new_value, performed_by, created_at) VALUES (?, 'status_changed', 'open', 'in_progress', ?, ?)",
+            (ticket_id, user, now))
+        if notes:
+            conn.execute("INSERT INTO ticket_notes (ticket_id, author, content, is_internal, created_at) VALUES (?, ?, ?, 0, ?)",
+                (ticket_id, user, notes, now))
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/tickets/<int:ticket_id>/resolve", methods=["POST"])
+@require_login
+def api_ticket_resolve(ticket_id):
+    data = request.get_json(silent=True) or {}
+    resolution_notes = (data.get("resolution_notes") or "").strip()
+    now = utc_now_iso()
+    user = session.get("user", "system")
+    with get_db() as conn:
+        conn.execute("UPDATE tickets SET status = 'resolved', resolution_notes = ?, resolved_at = ?, updated_at = ? WHERE ticket_id = ?",
+            (resolution_notes, now, now, ticket_id))
+        conn.execute("INSERT INTO ticket_history (ticket_id, action, old_value, new_value, performed_by, created_at) VALUES (?, 'resolved', 'in_progress', 'resolved', ?, ?)",
+            (ticket_id, user, now))
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/tickets/<int:ticket_id>/close", methods=["POST"])
+@require_login
+def api_ticket_close(ticket_id):
+    data = request.get_json(silent=True) or {}
+    resolution_notes = (data.get("resolution_notes") or "").strip()
+    now = utc_now_iso()
+    user = session.get("user", "system")
+    with get_db() as conn:
+        conn.execute("UPDATE tickets SET status = 'closed', resolution_notes = COALESCE(NULLIF(?, ''), resolution_notes), closed_at = ?, updated_at = ? WHERE ticket_id = ?",
+            (resolution_notes or None, now, now, ticket_id))
+        conn.execute("INSERT INTO ticket_history (ticket_id, action, old_value, new_value, performed_by, created_at) VALUES (?, 'closed', 'resolved', 'closed', ?, ?)",
+            (ticket_id, user, now))
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/tickets/<int:ticket_id>/reopen", methods=["POST"])
+@require_login
+def api_ticket_reopen(ticket_id):
+    now = utc_now_iso()
+    user = session.get("user", "system")
+    with get_db() as conn:
+        conn.execute("UPDATE tickets SET status = 'open', closed_at = NULL, resolved_at = NULL, updated_at = ? WHERE ticket_id = ?", (now, ticket_id))
+        conn.execute("INSERT INTO ticket_history (ticket_id, action, old_value, new_value, performed_by, created_at) VALUES (?, 'status_changed', 'closed', 'open', ?, ?)",
+            (ticket_id, user, now))
+        conn.commit()
+    return jsonify({"ok": True})
+
+@app.route("/api/tickets/<int:ticket_id>/notes", methods=["GET"])
+@require_login
+def api_ticket_notes_list(ticket_id):
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM ticket_notes WHERE ticket_id = ? ORDER BY created_at DESC", (ticket_id,)).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/tickets/<int:ticket_id>/notes", methods=["POST"])
+@require_login
+def api_ticket_notes_add(ticket_id):
+    data = request.get_json(silent=True) or {}
+    content_text = (data.get("content") or "").strip()
+    is_internal = data.get("is_internal", 0)
+    if not content_text:
+        return jsonify({"error": "content required"}), 400
+    now = utc_now_iso()
+    user = session.get("user", "system")
+    with get_db() as conn:
+        conn.execute("INSERT INTO ticket_notes (ticket_id, author, content, is_internal, created_at) VALUES (?, ?, ?, ?, ?)",
+            (ticket_id, user, content_text, 1 if is_internal else 0, now))
+        conn.execute("UPDATE tickets SET updated_at = ? WHERE ticket_id = ?", (now, ticket_id))
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/tickets/<int:ticket_id>/history", methods=["GET"])
+@require_login
+def api_ticket_history(ticket_id):
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM ticket_history WHERE ticket_id = ? ORDER BY created_at DESC", (ticket_id,)).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/tickets/stats", methods=["GET"])
+@require_login
+def api_tickets_stats():
+    tid = get_current_tenant()
+    with get_db() as conn:
+        stats = {}
+        for st in ['open', 'in_progress', 'on_hold', 'resolved', 'closed']:
+            row = conn.execute("SELECT COUNT(*) as cnt FROM tickets WHERE tenant_id = ? AND status = ?", (tid, st)).fetchone()
+            stats[st] = row["cnt"]
+        stats["total"] = sum(stats.values())
+    return jsonify(stats)
+
+@app.route("/api/tickets/report", methods=["GET"])
+@require_login
+def api_tickets_report():
+    tid = get_current_tenant()
+    date_from = request.args.get("from", "")
+    date_to = request.args.get("to", "")
+    status = request.args.get("status", "")
+    query = "SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ?"
+    params = [tid]
+    if status:
+        query += " AND t.status = ?"
+        params.append(status)
+    if date_from:
+        query += " AND t.created_at >= ?"
+        params.append(date_from)
+    if date_to:
+        query += " AND t.created_at <= ?"
+        params.append(date_to + "T23:59:59")
+    query += " ORDER BY t.created_at DESC"
+    with get_db() as conn:
+        rows = conn.execute(query, params).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/tickets/report/pdf", methods=["GET"])
+@require_login
+def api_tickets_report_pdf():
+    from fpdf import FPDF
+    from flask import Response
+    tid = get_current_tenant()
+    date_from = request.args.get("from", "")
+    date_to = request.args.get("to", "")
+    status = request.args.get("status", "")
+    query = "SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ?"
+    params = [tid]
+    if status:
+        query += " AND t.status = ?"
+        params.append(status)
+    if date_from:
+        query += " AND t.created_at >= ?"
+        params.append(date_from)
+    if date_to:
+        query += " AND t.created_at <= ?"
+        params.append(date_to + "T23:59:59")
+    query += " ORDER BY t.created_at DESC"
+    with get_db() as conn:
+        rows = conn.execute(query, params).fetchall()
+        tenant = conn.execute("SELECT name FROM tenants WHERE tenant_id = ?", (tid,)).fetchone()
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.cell(0, 15, "InvPro - Relatorio de Chamados", 0, 1, "C")
+    pdf.set_font("Helvetica", "", 12)
+    tname = tenant["name"] if tenant else "N/A"
+    pdf.cell(0, 8, "Empresa: " + tname, 0, 1)
+    if date_from or date_to:
+        pdf.cell(0, 8, "Periodo: " + (date_from or "Inicio") + " a " + (date_to or "Fim"), 0, 1)
+    pdf.cell(0, 8, "Total: " + str(len(rows)), 0, 1)
+    pdf.ln(5)
+    sl = {"open": "Abertos", "in_progress": "Em Andamento", "on_hold": "Em Espera", "resolved": "Resolvidos", "closed": "Fechados"}
+    sc = {}
+    for r in rows:
+        s = r["status"]
+        sc[s] = sc.get(s, 0) + 1
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 10, "Resumo por Status", 0, 1)
+    pdf.set_font("Helvetica", "", 11)
+    for s, cnt in sc.items():
+        pdf.cell(0, 7, sl.get(s, s) + ": " + str(cnt), 0, 1)
+    pdf.ln(5)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_fill_color(56, 189, 248)
+    pdf.set_text_color(255, 255, 255)
+    for hdr in ["ID", "Titulo", "Status", "Prioridade", "PC", "Criado"]:
+        pdf.cell(30 if hdr == "Titulo" else 20, 8, hdr, 1, 0, "C", True)
+    pdf.ln()
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(0, 0, 0)
+    fill = False
+    for r in rows:
+        fc = (240, 240, 240) if fill else (255, 255, 255)
+        pdf.set_fill_color(*fc)
+        pdf.cell(20, 7, str(r["ticket_id"]), 1, 0, "C", True)
+        pdf.cell(30, 7, (r["title"] or "")[:15], 1, 0, "L", True)
+        pdf.cell(20, 7, sl.get(r["status"], r["status"])[:10], 1, 0, "C", True)
+        pdf.cell(20, 7, r["priority"].capitalize()[:8], 1, 0, "C", True)
+        pdf.cell(20, 7, (r["hostname"] or "N/A")[:10], 1, 0, "C", True)
+        pdf.cell(20, 7, (r["created_at"] or "")[:10], 1, 0, "C", True)
+        pdf.ln()
+        fill = not fill
+    output = pdf.output()
+    return Response(output, mimetype="application/pdf", headers={"Content-Disposition": "attachment; filename=relatorio_chamados.pdf"})
+
+# ================================
 # PAGES
 # ================================
 @app.route("/manutencao")
@@ -1741,10 +2005,135 @@ def internal_error(e):
 def ratelimit_handler(e):
     return jsonify({"error": "rate limit exceeded"}), 429
 
+
+
+
+
+
+
+@app.route("/suporte")
+@require_login
+def suporte_dashboard():
+    return render_template("dashboard_chamados.html")
+
+@app.route("/api/tickets/dashboard")
+@require_login
+def api_tickets_dashboard():
+    with get_db() as conn:
+        # Tickets by status
+        status_counts = {}
+        for row in conn.execute("SELECT status, COUNT(*) as cnt FROM tickets GROUP BY status"):
+            status_counts[row["status"]] = row["cnt"]
+        
+        # Tickets by priority
+        priority_counts = {}
+        for row in conn.execute("SELECT priority, COUNT(*) as cnt FROM tickets GROUP BY priority"):
+            priority_counts[row["priority"]] = row["cnt"]
+        
+        # Tickets created per day (last 30 days)
+        daily_created = []
+        for row in conn.execute("""
+            SELECT DATE(created_at) as day, COUNT(*) as cnt 
+            FROM tickets 
+            WHERE created_at >= datetime('now', '-30 days')
+            GROUP BY DATE(created_at) 
+            ORDER BY day
+        """):
+            daily_created.append({"date": row["day"], "count": row["cnt"]})
+        
+        # Tickets resolved per day (last 30 days)
+        daily_resolved = []
+        for row in conn.execute("""
+            SELECT DATE(resolved_at) as day, COUNT(*) as cnt 
+            FROM tickets 
+            WHERE resolved_at IS NOT NULL AND resolved_at >= datetime('now', '-30 days')
+            GROUP BY DATE(resolved_at) 
+            ORDER BY day
+        """):
+            daily_resolved.append({"date": row["day"], "count": row["cnt"]})
+        
+        # Average resolution time (in hours)
+        avg_time = conn.execute("""
+            SELECT AVG((julianday(resolved_at) - julianday(created_at)) * 24) as avg_hours
+            FROM tickets WHERE resolved_at IS NOT NULL
+        """).fetchone()["avg_hours"] or 0
+        
+        # Tickets by unit
+        unit_counts = []
+        for row in conn.execute("""
+            SELECT u.name as unit_name, COUNT(t.ticket_id) as cnt
+            FROM tickets t
+            LEFT JOIN computers ON t.agent_id = computers.agent_id
+            LEFT JOIN units u ON computers.unit_id = u.unit_id
+            GROUP BY u.name
+            ORDER BY cnt DESC
+            LIMIT 10
+        """):
+            unit_counts.append({"unit": row["unit_name"] or "Sem unidade", "count": row["cnt"]})
+        
+        # Open SLAs by priority
+        sla_info = []
+        for row in conn.execute("""
+            SELECT ticket_id, title, priority, created_at, status
+            FROM tickets WHERE status IN ('open', 'in_progress')
+            ORDER BY CASE priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END
+        """):
+            sla_hours = {"critical": 1, "high": 4, "medium": 8, "low": 24}.get(row["priority"], 24)
+            sla_info.append({
+                "ticket_id": row["ticket_id"],
+                "title": row["title"],
+                "priority": row["priority"],
+                "created_at": row["created_at"],
+                "sla_hours": sla_hours,
+                "status": row["status"]
+            })
+        
+        # Total tickets
+        total = conn.execute("SELECT COUNT(*) as cnt FROM tickets").fetchone()["cnt"]
+        
+    return jsonify({
+        "status_counts": status_counts,
+        "priority_counts": priority_counts,
+        "daily_created": daily_created,
+        "daily_resolved": daily_resolved,
+        "avg_resolution_hours": round(avg_time, 1),
+        "unit_counts": unit_counts,
+        "sla_info": sla_info,
+        "total": total
+    })
+
+@app.route("/api/tickets/public", methods=["POST"])
+def api_ticket_public():
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()
+    desc = (data.get("description") or "").strip()
+    priority = data.get("priority", "medium")
+    created_by = (data.get("created_by") or "Anonimo").strip()
+    email = (data.get("email") or "").strip() or None
+    if not title or not desc:
+        return jsonify({"error": "Titulo e descricao sao obrigatorios"}), 400
+    now = utc_now_iso()
+    user = session.get("user", created_by)
+    with get_db() as conn:
+        conn.execute("INSERT INTO tickets (title, description, priority, status, created_by, created_at, updated_at) VALUES (?, ?, ?, 'open', ?, ?, ?)",
+            (title, desc, priority, created_by, now, now))
+        ticket_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.execute("INSERT INTO ticket_history (ticket_id, action, old_value, new_value, performed_by, created_at) VALUES (?, 'created', NULL, 'open', ?, ?)",
+            (ticket_id, created_by, now))
+        if email:
+            conn.execute("UPDATE tickets SET created_by = ? || ' (' || ? || ')' WHERE ticket_id = ?", (created_by, email, ticket_id))
+        conn.commit()
+    return jsonify({"ok": True, "ticket_id": ticket_id})
+
+@app.route("/abrir-chamado")
+def abrir_chamado_page():
+    return render_template("abrir_chamado.html")
+
 if __name__ == "__main__":
     if os.path.exists(DB_PATH):
         backup_db()
     init_db()
+    migrate_db()
     host = os.environ.get("FLASK_HOST", "0.0.0.0")
     port = int(os.environ.get("FLASK_PORT", "5000"))
     debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"

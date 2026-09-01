@@ -1,0 +1,80 @@
+<!DOCTYPE html><html lang=pt-BR><head><meta charset=UTF-8><meta name=viewport content=width=device-width,initial-scale=1.0><title>Dashboard - InvPro</title><link href=https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap rel=stylesheet><script src=https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js></script>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Inter,-apple-system,sans-serif;background:#0a0e1a;color:#e2e8f0;min-height:100vh}.top-bar{background:rgba(15,23,42,.95);backdrop-filter:blur(20px);border-bottom:1px solid rgba(51,65,85,.3);padding:14px 24px;display:flex;gap:16px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40}.brand{display:flex;align-items:center;gap:10px}.brand-icon{width:36px;height:36px;background:linear-gradient(135deg,#38bdf8,#818cf8);border-radius:10px;display:flex;align-items:center;justify-content:center}.brand-icon svg{width:20px;height:20px;color:white}.brand-text{font-size:20px;font-weight:800;background:linear-gradient(135deg,#38bdf8,#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}.brand-sub{font-size:11px;color:#64748b;font-weight:500}.top-right{display:flex;gap:10px;align-items:center}.menu-wrap{position:relative}.menu-btn{background:linear-gradient(135deg,#38bdf8,#818cf8);border:none;color:white;padding:10px 18px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;display:flex;align-items:center;gap:8px;transition:all .2s}.menu-dropdown{display:none;position:absolute;right:0;top:100%;margin-top:8px;background:rgba(15,23,42,.98);backdrop-filter:blur(20px);border:1px solid rgba(51,65,85,.4);border-radius:14px;padding:6px 0;min-width:200px;z-index:50;box-shadow:0 20px 40px rgba(0,0,0,.5)}.menu-dropdown.show{display:block}.menu-dropdown a{display:flex;align-items:center;gap:10px;padding:11px 18px;color:#e2e8f0;text-decoration:none;font-size:13px;transition:all .15s}.menu-dropdown a:hover{background:rgba(56,189,248,.1);color:#38bdf8}.menu-dropdown hr{border:none;border-top:1px solid rgba(51,65,85,.3);margin:4px 0}.menu-dropdown .menu-label{font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:1px;padding:10px 18px 4px;font-weight:600}.content{padding:24px}.page-title{font-size:22px;font-weight:700;color:#f8fafc;margin-bottom:4px;display:flex;align-items:center;gap:10px}.page-title svg{width:24px;height:24px;color:#38bdf8}.page-desc{font-size:13px;color:#64748b;margin-bottom:20px}.stats-row{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap}.stat-card{flex:1;min-width:140px;background:rgba(30,41,59,.5);border:1px solid rgba(51,65,85,.3);border-radius:14px;padding:18px 20px;text-align:center}.stat-card .num{font-size:32px;font-weight:800;line-height:1}.stat-card .label{font-size:11px;color:#64748b;margin-top:6px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}.stat-blue .num{color:#60a5fa}.stat-yellow .num{color:#facc15}.stat-green .num{color:#22c55e}.stat-purple .num{color:#a78bfa}.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}.chart-card{background:rgba(30,41,59,.5);border:1px solid rgba(51,65,85,.3);border-radius:14px;padding:20px}.chart-card h3{font-size:14px;font-weight:700;color:#f1f5f9;margin-bottom:16px;display:flex;align-items:center;gap:8px}.chart-card h3 svg{width:18px;height:18px;color:#38bdf8}.sla-section{margin-bottom:24px}.sla-section h3{font-size:14px;font-weight:700;color:#f1f5f9;margin-bottom:12px;display:flex;align-items:center;gap:8px}.sla-section h3 svg{width:18px;height:18px;color:#f87171}.sla-list{display:flex;flex-direction:column;gap:8px}.sla-item{background:rgba(30,41,59,.5);border:1px solid rgba(51,65,85,.3);border-radius:12px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;transition:all .2s}.sla-item:hover{border-color:rgba(56,189,248,.3)}.sla-item.sla-ok{border-left:3px solid #22c55e}.sla-item.sla-warn{border-left:3px solid #facc15}.sla-item.sla-danger{border-left:3px solid #f87171}.sla-item.sla-critical{border-left:3px solid #ef4444;background:rgba(239,68,68,.05)}.sla-info{flex:1}.sla-title{font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:2px}.sla-meta{font-size:11px;color:#64748b}.sla-badge{padding:4px 12px;border-radius:8px;font-size:12px;font-weight:700;font-family:monospace}.sla-badge.ok{background:rgba(34,197,94,.15);color:#22c55e}.sla-badge.warn{background:rgba(250,204,21,.15);color:#facc15}.sla-badge.danger{background:rgba(239,68,68,.15);color:#f87171}.sla-badge.critical{background:rgba(239,68,68,.3);color:#ef4444;animation:pulse 1s infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}.badge{padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;display:inline-block}.badge-low{background:rgba(34,197,94,.1);color:#4ade80}.badge-medium{background:rgba(250,204,21,.1);color:#facc15}.badge-high{background:rgba(251,146,60,.1);color:#fb923c}.badge-critical{background:rgba(239,68,68,.15);color:#f87171}.kanban-section{margin-bottom:24px}.kanban-section h3{font-size:14px;font-weight:700;color:#f1f5f9;margin-bottom:12px;display:flex;align-items:center;gap:8px}.kanban-section h3 svg{width:18px;height:18px;color:#818cf8}.kanban{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.kanban-col{background:rgba(15,23,42,.6);border:1px solid rgba(51,65,85,.3);border-radius:14px;padding:14px;min-height:200px}.kanban-col-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}.kanban-col-header .count{background:rgba(51,65,85,.5);padding:2px 8px;border-radius:6px;font-size:11px}.kanban-col.col-open .kanban-col-header{color:#60a5fa}.kanban-col.col-progress .kanban-col-header{color:#facc15}.kanban-col.col-resolved .kanban-col-header{color:#22c55e}.kanban-col.col-closed .kanban-col-header{color:#94a3b8}.kanban-card{background:rgba(30,41,59,.8);border:1px solid rgba(51,65,85,.3);border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer;transition:all .2s}.kanban-card:hover{border-color:rgba(56,189,248,.4);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.3)}.kanban-card-title{font-size:12px;font-weight:600;color:#e2e8f0;margin-bottom:6px}.kanban-card-meta{display:flex;gap:4px;align-items:center;flex-wrap:wrap}@media(max-width:900px){.charts-row{grid-template-columns:1fr}.kanban{grid-template-columns:1fr 1fr}}@media(max-width:600px){.kanban{grid-template-columns:1fr}.stats-row{flex-direction:column}}</style></head><body>
+<div class=top-bar><div class=brand><div class=brand-icon><svg viewBox='0 0 24 24' fill=none stroke=currentColor stroke-width=2><rect x=2 y=3 width=20 height=14 rx=2/><line x1=8 y1=21 x2=16 y2=21/><line x1=12 y1=17 x2=12 y2=21/></svg></div><div><div class=brand-text>InvPro</div><div class=brand-sub>Dashboard</div></div></div>
+<div class=top-right><div class=menu-wrap><button class=menu-btn onclick=toggleMenu()><svg viewBox='0 0 24 24' fill=none stroke=currentColor stroke-width=2 width=16 height=16><line x1=3 y1=6 x2=21 y2=6/><line x1=3 y1=12 x2=21 y2=12/><line x1=3 y1=18 x2=21 y2=18/></svg> Menu</button>
+<div class=menu-dropdown id=menuDrop><div class=menu-label>NAVEGACAO</div><a href=/>Computadores</a><a href=/chamados>Chamados</a><a href=/dashboard style=color:#38bdf8>Dashboard</a><a href=/manutencao>Manutencao</a><a href=/scripts>Scripts</a><a href=/unidades>Unidades</a><a href=/empresas>Empresas</a><hr><div class=menu-label>ADMIN</div><a href=/usuarios>Usuarios</a><a href=/logout style=color:#f87171>Sair</a></div></div></div></div>
+<div class=content><div class=page-title><svg viewBox='0 0 24 24' fill=none stroke=currentColor stroke-width=2><rect x=3 y=3 width=18 height=18 rx=2/><line x1=3 y1=9 x2=21 y2=9/><line x1=9 y1=21 x2=9 y2=9/></svg> Dashboard de Chamados</div><div class=page-desc>Visao geral do sistema de suporte tecnico</div>
+<div class=stats-row><div class=stat-card stat-blue><div class=num id=sTotal>-</div><div class=label>Total</div></div><div class=stat-card stat-blue><div class=num id=sOpen>-</div><div class=label>Abertos</div></div><div class=stat-card stat-yellow><div class=num id=sProgress>-</div><div class=label>Em Andamento</div></div><div class=stat-card stat-green><div class=num id=sResolved>-</div><div class=label>Resolvidos</div></div><div class=stat-card stat-purple><div class=num id=sAvgTime>-</div><div class=label>Tempo Medio (h)</div></div></div>
+<div class=sla-section><h3><svg viewBox='0 0 24 24' fill=none stroke=currentColor stroke-width=2><circle cx=12 cy=12 r=10/><polyline points=12 6 12 12 16 14/></svg> SLA - Chamados em Aberto</h3><div class=sla-list id=slaList>Carregando...</div></div>
+<div class=kanban-section><h3><svg viewBox='0 0 24 24' fill=none stroke=currentColor stroke-width=2><rect x=3 y=3 width=7 height=9 rx=1/><rect x=14 y=3 width=7 height=5 rx=1/><rect x=14 y=12 width=7 height=9 rx=1/><rect x=3 y=16 width=7 height=5 rx=1/></svg> Kanban - Fluxo de Chamados</h3><div class=kanban>
+<div class=kanban-col col-open><div class=kanban-col-header>Aberto <span class=count id=kOpen>0</span></div><div id=kBoard-open></div></div>
+<div class=kanban-col col-progress><div class=kanban-col-header>Em Andamento <span class=count id=kProgress>0</span></div><div id=kBoard-in_progress></div></div>
+<div class=kanban-col col-resolved><div class=kanban-col-header>Resolvido <span class=count id=kResolved>0</span></div><div id=kBoard-resolved></div></div>
+<div class=kanban-col col-closed><div class=kanban-col-header>Fechado <span class=count id=kClosed>0</span></div><div id=kBoard-closed></div></div>
+</div></div>
+<div class=charts-row><div class=chart-card><h3><svg viewBox='0 0 24 24' fill=none stroke=currentColor stroke-width=2><polyline points=22 12 18 12 15 21 9 3 6 12 2 12/></svg> Chamados Criados vs Resolvidos (30 dias)</h3><canvas id=chartLine height=200></canvas></div><div class=chart-card><h3><svg viewBox='0 0 24 24' fill=none stroke=currentColor stroke-width=2><path d=M21.21 15.89A10 10 0 1 1 8 2.83/><path d=M22 12A10 10 0 0 0 12 2v10z/></svg> Chamados por Prioridade</h3><canvas id=chartPie height=200></canvas></div></div>
+<div class=charts-row><div class=chart-card><h3>Chamados por Unidade</h3><canvas id=chartBar height=200></canvas></div><div class=chart-card><h3>Chamados por Status</h3><canvas id=chartDoughnut height=200></canvas></div></div></div><script>function toggleMenu(){document.getElementById("menuDrop").classList.toggle("show")}
+document.addEventListener("click",function(e){var w=document.querySelector(".menu-wrap");if(w&&!w.contains(e.target))document.getElementById("menuDrop").classList.remove("show")});
+var charts={};
+function initCharts(){Chart.defaults.color="#94a3b8";Chart.defaults.borderColor="rgba(51,65,85,.3)"}
+function updateSLA(slaInfo){
+var el=document.getElementById("slaList");
+if(!slaInfo.length){el.innerHTML="<div style=text-align:center;padding:20px;color:#64748b>Nenhum chamado em aberto</div>";return}
+var h="";
+slaInfo.forEach(function(s){
+var created=new Date(s.created_at);var now=new Date();var elapsed=(now-created)/(1000*60*60);var remaining=s.sla_hours-elapsed;
+var cls="ok",badgeCls="ok",timeStr="";
+if(remaining<=0){cls="critical";badgeCls="critical";timeStr="VENCIDO"}
+else if(remaining<=1){cls="danger";badgeCls="danger";timeStr=Math.floor(remaining*60)+"min"}
+else if(remaining<=s.sla_hours*0.3){cls="warn";badgeCls="warn";timeStr=Math.floor(remaining)+"h "+Math.floor((remaining%1)*60)+"min"}
+else{cls="ok";badgeCls="ok";timeStr=Math.floor(remaining)+"h "+Math.floor((remaining%1)*60)+"min"}
+var pl={low:"Baixa",medium:"Media",high:"Alta",critical:"Critica"};
+h+="<div class=sla-item "+cls+"><div class=sla-info><div class=sla-title>"+s.title+"</div><div class=sla-meta><span class=badge badge-"+s.priority+">"+pl[s.priority]+"</span> Criado "+created.toLocaleDateString("pt-BR")+" "+created.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})+"</div></div><div class=sla-badge "+badgeCls+">"+timeStr+"</div></div>";
+});
+el.innerHTML=h;
+}
+function loadDashboard(){
+fetch("/api/tickets/dashboard").then(function(r){return r.json()}).then(function(d){
+document.getElementById("sTotal").textContent=d.total||0;
+document.getElementById("sOpen").textContent=d.status_counts.open||0;
+document.getElementById("sProgress").textContent=d.status_counts.in_progress||0;
+document.getElementById("sResolved").textContent=d.status_counts.resolved||0;
+document.getElementById("sAvgTime").textContent=d.avg_resolution_hours||0;
+updateSLA(d.sla_info);buildCharts(d);loadKanban();
+});
+}
+function buildCharts(d){
+if(charts.line)charts.line.destroy();if(charts.pie)charts.pie.destroy();
+if(charts.bar)charts.bar.destroy();if(charts.doughnut)charts.doughnut.destroy();
+var labels=d.daily_created.map(function(x){return x.date.slice(5)});
+var created=d.daily_created.map(function(x){return x.count});
+var resolved=d.daily_resolved.map(function(x){return x.count});
+charts.line=new Chart(document.getElementById("chartLine"),{type:"line",data:{labels:labels,datasets:[{label:"Criados",data:created,borderColor:"#38bdf8",backgroundColor:"rgba(56,189,248,.1)",fill:true,tension:.4},{label:"Resolvidos",data:resolved,borderColor:"#22c55e",backgroundColor:"rgba(34,197,94,.1)",fill:true,tension:.4}]},options:{responsive:true,plugins:{legend:{position:"bottom"}},scales:{y:{beginAtZero:true}}}});
+var pLabels=["Baixa","Media","Alta","Critica"];
+var pData=[d.priority_counts.low||0,d.priority_counts.medium||0,d.priority_counts.high||0,d.priority_counts.critical||0];
+charts.pie=new Chart(document.getElementById("chartPie"),{type:"pie",data:{labels:pLabels,datasets:[{data:pData,backgroundColor:["#22c55e","#facc15","#fb923c","#ef4444"]}]},options:{responsive:true,plugins:{legend:{position:"bottom"}}}});
+var uLabels=d.unit_counts.map(function(x){return x.unit});
+var uData=d.unit_counts.map(function(x){return x.count});
+charts.bar=new Chart(document.getElementById("chartBar"),{type:"bar",data:{labels:uLabels,datasets:[{label:"Chamados",data:uData,backgroundColor:"rgba(129,140,248,.6)",borderColor:"#818cf8",borderWidth:1,borderRadius:6}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+var sLabels=["Abertos","Em Andamento","Resolvidos","Fechados"];
+var sData=[d.status_counts.open||0,d.status_counts.in_progress||0,d.status_counts.resolved||0,d.status_counts.closed||0];
+charts.doughnut=new Chart(document.getElementById("chartDoughnut"),{type:"doughnut",data:{labels:sLabels,datasets:[{data:sData,backgroundColor:["#60a5fa","#facc15","#22c55e","#94a3b8"]}]},options:{responsive:true,plugins:{legend:{position:"bottom"}}}});
+}
+function loadKanban(){
+fetch("/api/tickets").then(function(r){return r.json()}).then(function(tickets){
+var cols={open:[],in_progress:[],resolved:[],closed:[]};
+tickets.forEach(function(t){if(cols[t.status])cols[t.status].push(t)});
+["open","in_progress","resolved","closed"].forEach(function(s){
+var el=document.getElementById("kBoard-"+s);
+var kMap={"open":"kOpen","in_progress":"kProgress","resolved":"kResolved","closed":"kClosed"};
+document.getElementById(kMap[s]).textContent=cols[s].length;
+var h="";var pl={low:"Baixa",medium:"Media",high:"Alta",critical:"Critica"};
+cols[s].forEach(function(t){
+h+="<div class=kanban-card onclick=window.location='/chamados'><div class=kanban-card-title>"+t.title+"</div><div class=kanban-card-meta><span class=badge badge-"+t.priority+">"+pl[t.priority]+"</span></div></div>";
+});
+el.innerHTML=h;
+});
+});
+}
+initCharts();loadDashboard();
+</script></body></html>
