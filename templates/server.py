@@ -1662,18 +1662,18 @@ def api_maintenance_resolve(alert_id):
 @app.route("/api/tickets", methods=["GET"])
 @require_login
 def api_tickets_list():
-    tid = get_current_tenant()
+    tenant = get_user_tenant()
     status = request.args.get("status")
     with get_db() as conn:
         if status:
             rows = conn.execute(
                 "SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ? AND t.status = ? ORDER BY t.created_at DESC",
-                (tid, status)
+                (tenant, status)
             ).fetchall()
         else:
             rows = conn.execute(
                 "SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ? ORDER BY t.created_at DESC",
-                (tid,)
+                (tenant,)
             ).fetchall()
     return jsonify([dict(r) for r in rows])
 
@@ -2075,6 +2075,20 @@ def notify_status_changed(ticket_id, title, old_status, new_status, email=None):
     if email:
         send_email(email, subject, body)
 
+
+def get_user_tenant():
+    """Get current user's tenant_id from session."""
+    return session.get('tenant_id', 1)
+
+def require_tenant(f):
+    """Decorator to add tenant_id to function."""
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        kwargs['tenant_id'] = get_user_tenant()
+        return f(*args, **kwargs)
+    return decorated
+
 @app.route("/dashboard")
 @require_login
 def dashboard_page():
@@ -2207,7 +2221,8 @@ def api_ticket_track():
             SELECT ticket_id, title, description, priority, status, 
                    created_by, created_at, resolved_at, closed_at, resolution_notes
             FROM tickets 
-            WHERE created_by LIKE ? OR created_by LIKE ?
+            WHERE (created_by LIKE ? OR created_by LIKE ?)
+            ORDER BY created_at DESC
             ORDER BY created_at DESC
         """, ('%' + email + '%', '%' + email.split('@')[0] + '%')).fetchall()
     tickets = []
@@ -2221,6 +2236,8 @@ def api_ticket_track():
         })
     return jsonify({"tickets": tickets, "email": email})
 
+
+
 @app.route("/api/tickets/public", methods=["POST"])
 def api_ticket_public():
     data = request.get_json(silent=True) or {}
@@ -2233,9 +2250,10 @@ def api_ticket_public():
         return jsonify({"error": "Titulo e descricao sao obrigatorios"}), 400
     now = utc_now_iso()
     user = session.get("user", created_by)
+    tenant_id = data.get("tenant_id", get_user_tenant())
     with get_db() as conn:
-        conn.execute("INSERT INTO tickets (title, description, priority, status, created_by, created_at, updated_at) VALUES (?, ?, ?, 'open', ?, ?, ?)",
-            (title, desc, priority, created_by, now, now))
+        conn.execute("INSERT INTO tickets (title, description, priority, status, created_by, created_at, updated_at, tenant_id) VALUES (?, ?, ?, 'open', ?, ?, ?, ?)",
+            (title, desc, priority, created_by, now, now, tenant_id))
         ticket_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         conn.execute("INSERT INTO ticket_history (ticket_id, action, old_value, new_value, performed_by, created_at) VALUES (?, 'created', NULL, 'open', ?, ?)",
             (ticket_id, created_by, now))
