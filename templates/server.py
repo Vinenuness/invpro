@@ -1783,6 +1783,7 @@ def api_ticket_start(ticket_id):
             conn.execute("INSERT INTO ticket_notes (ticket_id, author, content, is_internal, created_at) VALUES (?, ?, ?, 0, ?)",
                 (ticket_id, user, notes, now))
         conn.commit()
+    _notify_status(ticket_id, "open", "in_progress")
     return jsonify({"ok": True})
 
 
@@ -1799,6 +1800,7 @@ def api_ticket_resolve(ticket_id):
         conn.execute("INSERT INTO ticket_history (ticket_id, action, old_value, new_value, performed_by, created_at) VALUES (?, 'resolved', 'in_progress', 'resolved', ?, ?)",
             (ticket_id, user, now))
         conn.commit()
+    _notify_status(ticket_id, "in_progress", "resolved")
     return jsonify({"ok": True})
 
 
@@ -1987,6 +1989,92 @@ def chamados_page():
 # ================================
 # PAGE - DASHBOARD
 # ================================
+
+
+# === Email Notification System ===
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+SMTP_HOST = os.environ.get("SMTP_HOST", "")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASS = os.environ.get("SMTP_PASS", "")
+SMTP_FROM = os.environ.get("SMTP_FROM", "suporte@invpro.com")
+EMAIL_ENABLED = bool(SMTP_HOST and SMTP_USER)
+
+def send_email(to, subject, body):
+    """Send email notification if SMTP is configured."""
+    if not EMAIL_ENABLED or not to:
+        return False
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = SMTP_FROM
+        msg["To"] = to
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "html"))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.send_message(msg)
+        return True
+    except Exception as e:
+        print(f"Email error: {e}")
+        return False
+
+def notify_ticket_created(ticket_id, title, created_by, email=None):
+    subject = f"[InvPro] Chamado #{ticket_id} criado - {title}"
+    body = f"""<div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto">
+    <div style="background:linear-gradient(135deg,#38bdf8,#818cf8);padding:20px;border-radius:12px 12px 0 0;text-align:center">
+        <h1 style="color:white;margin:0">InvPro</h1>
+        <p style="color:rgba(255,255,255,.8);margin:4px 0 0">Chamado Criado</p>
+    </div>
+    <div style="background:#1e293b;padding:24px;border-radius:0 0 12px 12px;color:#e2e8f0">
+        <h2 style="margin:0 0 16px">#{ticket_id} - {title}</h2>
+        <p>Seu chamado foi registrado com sucesso!</p>
+        <div style="background:rgba(51,65,85,.3);padding:12px;border-radius:8px;margin:16px 0">
+            <p style="margin:0"><strong>Status:</strong> Aberto</p>
+            <p style="margin:4px 0 0"><strong>Prioridade:</strong> Media</p>
+        </div>
+        <p style="font-size:13px;color:#94a3b8">Acompanhe seu chamado em: <a href="#" style="color:#38bdf8">InvPro - Acompanhar Chamado</a></p>
+    </div>
+</div>"""
+    if email:
+        send_email(email, subject, body)
+
+
+def _notify_status(ticket_id, old_status, new_status):
+    try:
+        with get_db() as conn:
+            row = conn.execute("SELECT title, created_by FROM tickets WHERE ticket_id = ?", (ticket_id,)).fetchone()
+            if row:
+                email = None
+                if "(" in row["created_by"]:
+                    email = row["created_by"].split("(")[1].rstrip(")")
+                notify_status_changed(ticket_id, row["title"], old_status, new_status, email)
+    except: pass
+
+def notify_status_changed(ticket_id, title, old_status, new_status, email=None):
+    SL = {"open": "Aberto", "in_progress": "Em Andamento", "resolved": "Resolvido", "closed": "Fechado"}
+    subject = f"[InvPro] Chamado #{ticket_id} - Status alterado para {SL.get(new_status, new_status)}"
+    body = f"""<div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto">
+    <div style="background:linear-gradient(135deg,#38bdf8,#818cf8);padding:20px;border-radius:12px 12px 0 0;text-align:center">
+        <h1 style="color:white;margin:0">InvPro</h1>
+        <p style="color:rgba(255,255,255,.8);margin:4px 0 0">Status Atualizado</p>
+    </div>
+    <div style="background:#1e293b;padding:24px;border-radius:0 0 12px 12px;color:#e2e8f0">
+        <h2 style="margin:0 0 16px">#{ticket_id} - {title}</h2>
+        <p>O status do seu chamado foi alterado:</p>
+        <div style="background:rgba(51,65,85,.3);padding:12px;border-radius:8px;margin:16px 0;text-align:center">
+            <span style="color:#94a3b8">{SL.get(old_status, old_status)}</span>
+            <span style="color:#38bdf8;margin:0 12px">→</span>
+            <span style="color:#22c55e;font-weight:bold">{SL.get(new_status, new_status)}</span>
+        </div>
+    </div>
+</div>"""
+    if email:
+        send_email(email, subject, body)
+
 @app.route("/dashboard")
 @require_login
 def dashboard_page():
@@ -2102,6 +2190,37 @@ def api_tickets_dashboard():
         "total": total
     })
 
+
+
+@app.route("/acompanhar-chamado")
+def acompanhar_chamado_page():
+    return render_template("acompanhar_chamado.html")
+
+@app.route("/api/tickets/track", methods=["POST"])
+def api_ticket_track():
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    if not email:
+        return jsonify({"error": "Email obrigatorio"}), 400
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT ticket_id, title, description, priority, status, 
+                   created_by, created_at, resolved_at, closed_at, resolution_notes
+            FROM tickets 
+            WHERE created_by LIKE ? OR created_by LIKE ?
+            ORDER BY created_at DESC
+        """, ('%' + email + '%', '%' + email.split('@')[0] + '%')).fetchall()
+    tickets = []
+    for r in rows:
+        tickets.append({
+            'ticket_id': r['ticket_id'], 'title': r['title'],
+            'description': r['description'], 'priority': r['priority'],
+            'status': r['status'], 'created_by': r['created_by'],
+            'created_at': r['created_at'], 'resolved_at': r['resolved_at'],
+            'closed_at': r['closed_at'], 'resolution_notes': r['resolution_notes']
+        })
+    return jsonify({"tickets": tickets, "email": email})
+
 @app.route("/api/tickets/public", methods=["POST"])
 def api_ticket_public():
     data = request.get_json(silent=True) or {}
@@ -2123,6 +2242,8 @@ def api_ticket_public():
         if email:
             conn.execute("UPDATE tickets SET created_by = ? || ' (' || ? || ')' WHERE ticket_id = ?", (created_by, email, ticket_id))
         conn.commit()
+    email = data.get("email") or (created_by.split("(")[1].rstrip(")") if "(" in created_by else None)
+    notify_ticket_created(ticket_id, title, created_by, email)
     return jsonify({"ok": True, "ticket_id": ticket_id})
 
 @app.route("/abrir-chamado")
