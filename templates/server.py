@@ -11,7 +11,7 @@ import shutil
 from datetime import datetime, timezone
 from functools import wraps
 
-from flask import Flask, request, jsonify, render_template, redirect, url_for, session
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session, send_file
 import sqlite3
 
 # ================================
@@ -309,6 +309,8 @@ def migrate_db():
                 'ALTER TABLE tickets ADD COLUMN first_response_at TEXT',
                 'ALTER TABLE tickets ADD COLUMN resolved_at TEXT',
                 'ALTER TABLE tickets ADD COLUMN sla_due TEXT',
+                'ALTER TABLE tickets ADD COLUMN unit_id INTEGER',
+                'ALTER TABLE tickets ADD COLUMN location_id INTEGER',
             ]:
                 try:
                     conn.execute(stmt)
@@ -449,7 +451,7 @@ def login_page():
         if username == LOGIN_USER and password == LOGIN_PASS:
             session["logged_in"] = True
             session["user"] = username
-            session["tenant_id"] = 1  # Default tenant
+            session["tenant_id"] = 2  # AHBB tenant
             from time import time
             session["last_activity"] = time()
             logger.info(f"Login bem-sucedido: {username}")
@@ -790,7 +792,8 @@ def api_agent_job_result(job_id):
 @app.route("/api/units", methods=["GET"])
 @require_login
 def api_units_list():
-    tid = get_current_tenant()
+    # Support tenant_id from query param (for public portal) or session
+    tid = request.args.get("tenant_id") or get_current_tenant()
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM units WHERE tenant_id = ? ORDER BY name", (tid,)).fetchall()
     return jsonify([dict(r) for r in rows])
@@ -1196,6 +1199,17 @@ def api_tenants_delete(tenant_id):
 @require_login
 def empresas_page():
     return render_template("empresas.html")
+
+
+@app.route("/estrutura")
+@require_login
+def estrutura_page():
+    return render_template("estrutura.html")
+
+
+@app.route("/estrutura.js")
+def estrutura_js():
+    return send_file(os.path.join(APP_DIR, "estrutura.js"), mimetype="application/javascript")
 
 
 # ================================
@@ -1664,17 +1678,45 @@ def api_maintenance_resolve(alert_id):
 def api_tickets_list():
     tenant = get_user_tenant()
     status = request.args.get("status")
+    user_id = session.get("user_id")
     with get_db() as conn:
-        if status:
-            rows = conn.execute(
-                "SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ? AND t.status = ? ORDER BY t.created_at DESC",
-                (tenant, status)
-            ).fetchall()
+        # Check if user is admin
+        is_admin = 0
+        if user_id:
+            admin_row = conn.execute("SELECT is_admin FROM users WHERE user_id = ?", (user_id,)).fetchone()
+            if admin_row:
+                is_admin = admin_row["is_admin"]
+        
+        if is_admin:
+            # Admin sees all tickets in their tenant
+            if status:
+                rows = conn.execute(
+                    "SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ? AND t.status = ? ORDER BY t.created_at DESC",
+                    (tenant, status)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ? ORDER BY t.created_at DESC",
+                    (tenant,)
+                ).fetchall()
         else:
-            rows = conn.execute(
-                "SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ? ORDER BY t.created_at DESC",
-                (tenant,)
-            ).fetchall()
+            # Non-admin sees only tickets for their linked units
+            unit_ids = [r["unit_id"] for r in conn.execute("SELECT unit_id FROM user_units WHERE user_id = ?", (user_id,)).fetchall()]
+            if not unit_ids:
+                # No units linked = no tickets visible
+                rows = []
+            else:
+                placeholders = ",".join("?" * len(unit_ids))
+                if status:
+                    rows = conn.execute(
+                        f"SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ? AND t.status = ? AND t.unit_id IN ({placeholders}) ORDER BY t.created_at DESC",
+                        [tenant, status] + unit_ids
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        f"SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ? AND t.unit_id IN ({placeholders}) ORDER BY t.created_at DESC",
+                        [tenant] + unit_ids
+                    ).fetchall()
     return jsonify([dict(r) for r in rows])
 
 
@@ -2259,6 +2301,12 @@ def api_ticket_public():
             (ticket_id, created_by, now))
         if email:
             conn.execute("UPDATE tickets SET created_by = ? || ' (' || ? || ')' WHERE ticket_id = ?", (created_by, email, ticket_id))
+        # Store unit_id and location_id
+        unit_id = data.get("unit_id")
+        location_id = data.get("location_id")
+        if unit_id or location_id:
+            conn.execute("UPDATE tickets SET unit_id = ?, location_id = ? WHERE ticket_id = ?",
+                (unit_id, location_id, ticket_id))
         conn.commit()
     email = data.get("email") or (created_by.split("(")[1].rstrip(")") if "(" in created_by else None)
     notify_ticket_created(ticket_id, title, created_by, email)
@@ -2268,6 +2316,41 @@ def api_ticket_public():
 def abrir_chamado_page():
     return render_template("abrir_chamado.html")
 
+
+# ================================
+# PUBLIC API (no login required for ticket portal)
+# ================================
+@app.route("/api/public/tenants", methods=["GET"])
+def api_public_tenants_list():
+    with get_db() as conn:
+        rows = conn.execute("SELECT tenant_id, name FROM tenants ORDER BY name").fetchall()
+    return jsonify([{"tenant_id": r["tenant_id"], "name": r["name"]} for r in rows])
+
+
+@app.route("/api/public/units", methods=["GET"])
+def api_public_units_list():
+    tenant_id = request.args.get("tenant_id")
+    if not tenant_id:
+        return jsonify([])
+    with get_db() as conn:
+        rows = conn.execute("SELECT unit_id, name FROM units WHERE tenant_id = ? ORDER BY name", (tenant_id,)).fetchall()
+    return jsonify([{"unit_id": r["unit_id"], "name": r["name"]} for r in rows])
+
+
+@app.route("/api/public/locations", methods=["GET"])
+def api_public_locations_list():
+    unit_id = request.args.get("unit_id")
+    if not unit_id:
+        return jsonify([])
+    with get_db() as conn:
+        rows = conn.execute("SELECT location_id, name FROM locations WHERE unit_id = ? ORDER BY name", (unit_id,)).fetchall()
+    return jsonify([{"location_id": r["location_id"], "name": r["name"]} for r in rows])
+
+
+
+@app.route('/abrir-chamado.js')
+def abrir_chamado_js():
+    return send_file(os.path.join(APP_DIR, 'abrir_chamado.js'), mimetype='application/javascript')
 if __name__ == "__main__":
     if os.path.exists(DB_PATH):
         backup_db()
