@@ -13,6 +13,7 @@ from functools import wraps
 
 from flask import Flask, request, jsonify, render_template, redirect, url_for, session, send_file
 import sqlite3
+import bcrypt
 
 # ================================
 # CONFIGURAÇÃO VIA VARIÁVEIS DE AMBIENTE
@@ -793,9 +794,17 @@ def api_agent_job_result(job_id):
 @require_login
 def api_units_list():
     # Support tenant_id from query param (for public portal) or session
-    tid = request.args.get("tenant_id") or get_current_tenant()
+    tid_param = request.args.get("tenant_id")
+    if tid_param:
+        # Public portal: filter by tenant_id
+        with get_db() as conn:
+            rows = conn.execute("SELECT * FROM units WHERE tenant_id = ? ORDER BY name", (tid_param,)).fetchall()
+        return jsonify([dict(r) for r in rows])
+    # Admin: show all units with tenant name
     with get_db() as conn:
-        rows = conn.execute("SELECT * FROM units WHERE tenant_id = ? ORDER BY name", (tid,)).fetchall()
+        rows = conn.execute("""SELECT u.*, t.name as tenant_name FROM units u 
+            LEFT JOIN tenants t ON u.tenant_id = t.tenant_id 
+            ORDER BY t.name, u.name""").fetchall()
     return jsonify([dict(r) for r in rows])
 
 
@@ -808,7 +817,8 @@ def api_units_create():
     if not name:
         return jsonify({"error": "name is required"}), 400
     now = utc_now_iso()
-    tid = get_current_tenant()
+    # Accept tenant_id from request body (admin can assign to any company)
+    tid = data.get("tenant_id") or get_current_tenant()
     with get_db() as conn:
         try:
             conn.execute(
