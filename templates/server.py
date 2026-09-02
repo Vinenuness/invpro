@@ -1006,19 +1006,22 @@ def api_users_create():
         return jsonify({"error": "username, email and password are required"}), 400
     password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     now = utc_now_iso()
+    user_id = None
     with get_db() as conn:
         try:
+            tid = get_current_tenant()
             conn.execute(
-                "INSERT INTO users (username, email, password_hash, is_admin, created_at) VALUES (?, ?, ?, ?, ?)",
-                (username, email, password_hash, is_admin, now)
+                "INSERT INTO users (username, email, password_hash, is_admin, tenant_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (username, email, password_hash, is_admin, tid, now)
             )
             conn.commit()
+            user_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         except Exception as e:
             if "UNIQUE" in str(e):
                 return jsonify({"error": "username already exists"}), 400
             raise
     logger.info(f"Usuario criado: {username}")
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "user_id": user_id})
 
 
 @app.route("/api/users/<int:user_id>", methods=["POST"])
