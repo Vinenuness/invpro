@@ -31,6 +31,26 @@ try:
 except Exception:
     pass
 
+def _load_env_fallback():
+    """Parser minimo de .env (KEY=VALUE) quando python-dotenv nao esta instalado."""
+    for path in (os.path.join(APP_DIR, ".env"), os.path.join(os.path.dirname(APP_DIR), ".env")):
+        try:
+            if not os.path.isfile(path):
+                continue
+            with io.open(path, encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, _, val = line.partition("=")
+                    key = key.strip()
+                    if key and key not in os.environ:
+                        os.environ[key] = val.strip().strip('"').strip("'")
+        except Exception:
+            continue
+
+_load_env_fallback()
+
 IS_PRODUCTION = os.environ.get("FLASK_ENV", "").lower() in ("production", "prod")
 
 AGENT_TOKEN = os.environ.get("AGENT_TOKEN", "SEU_TOKEN_SUPER_SECRETO")
