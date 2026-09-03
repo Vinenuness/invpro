@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8" />
-<title>Usuarios - InvPro</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Usuarios - AtivoFix</title>
 <style>
 body{font-family:Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:20px}
-h1{margin:0}
+h1{margin:0;font-size:20px}
 .top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}
 .left{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 input,select{padding:10px 12px;border-radius:10px;border:1px solid #334155;background:#0b1220;color:#e2e8f0;outline:none}
@@ -22,8 +23,8 @@ a{color:#e2e8f0;text-decoration:none}
 .row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 .title{font-weight:800;color:#fff;font-size:16px}
 .muted{color:#94a3b8;font-size:13px;margin-top:6px;line-height:1.35}
-.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:20px}
-.modalBox{width:100%;max-width:520px;background:#111b33;border:1px solid #334155;border-radius:16px;padding:24px 28px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:20px;z-index:50}
+.modalBox{width:100%;max-width:520px;background:#111b33;border:1px solid #334155;border-radius:16px;padding:24px 28px;max-height:90vh;overflow-y:auto}
 .modalTitle{font-weight:800;margin:0 0 18px 0;font-size:20px;color:#fff}
 .modalActions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid #1e293b}
 .form-group{margin-bottom:12px}
@@ -33,29 +34,43 @@ a{color:#e2e8f0;text-decoration:none}
 .checkbox-group label{display:flex;align-items:center;gap:6px;padding:6px 10px;background:#0b1220;border:1px solid #334155;border-radius:8px;cursor:pointer;font-size:13px}
 .checkbox-group label:hover{border-color:#2563eb}
 .pill{display:inline-block;background:#0b1220;border:1px solid #334155;border-radius:999px;padding:2px 8px;font-size:11px;color:#cbd5e1;margin:2px}
-</style></head><body><div class=top><div class=left><a href=/>Voltar</a><h1>Usuarios</h1><div class=small id=count></div></div><button class="btn btn-primary" onclick="openCreateModal()">+ Novo Usuario</button></div>
+.badge-admin{background:#065f46;border-color:#10b981;color:#6ee7b7}
+.badge-unitadmin{background:#78350f;border-color:#f59e0b;color:#fcd34d}
+.badge-tech{background:#1e3a8a;border-color:#3b82f6;color:#93c5fd}
+.hidden{display:none !important}
+</style></head><body>
+<div class=top>
+  <div class=left><a href=/>Voltar</a><h1>Usuarios</h1><div class=small id=count></div></div>
+  <button class="btn btn-primary hidden" id=btnNew onclick=openCreateModal()>+ Novo Usuario</button>
+</div>
 <div id=grid class=grid></div>
 <div id=modal class=modal onclick=hideModal()><div class=modalBox onclick=event.stopPropagation()>
 <h3 class=modalTitle id=modalTitle>Novo Usuario</h3>
 <div class=form-group><label>Nome *</label><input id=userName placeholder="Ex: Joao Silva" /></div>
 <div class=form-group><label>Email *</label><input id=userEmail type=email placeholder="Ex: joao@email.com" /></div>
 <div class=form-group><label id=passwordLabel>Senha *</label><input id=userPassword type=password placeholder="Minimo 6 caracteres" /></div>
-<div class=form-group style="display:flex;align-items:center;gap:8px;">
-<label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;padding:8px 12px;background:#0b1220;border:1px solid #334155;border-radius:8px;font-size:14px;">
-<input type=checkbox id=userAdmin style="width:auto;margin:0;"> Administrador
-</label></div>
-<div class=form-group><label>Unidades</label><div id=unitCheckboxes class=checkbox-group></div></div>
+<div class=form-group><label>Perfil</label>
+<select id=userRole>
+  <option value=tech>Tecnico</option>
+  <option value=unit_admin>Admin da Unidade</option>
+  <option value=master>Admin da Empresa</option>
+</select></div>
+<div class="form-group" id=unitGroup><label>Unidades</label><div id=unitCheckboxes class=checkbox-group></div></div>
 <div class=modalActions><button class=btn onclick=hideModal()>Cancelar</button><button class="btn btn-primary" onclick=saveUser()>Salvar</button></div>
-</div></div><script>
-var users=[],allUnits=[],editingId=null;
+</div></div>
+<script>
+var users=[],allUnits=[],editingId=null,myRole="master",myUnitIds=null;
+async function loadMe(){try{var r=await fetch("/api/me");var m=await r.json();myRole=m.role||"master";myUnitIds=m.unit_ids;if(myRole==="master"||myRole==="unit_admin"){document.getElementById("btnNew").classList.remove("hidden");}var sel=document.getElementById("userRole");for(var i=sel.options.length-1;i>=0;i--){if(myRole!=="master"&&sel.options[i].value==="master")sel.remove(i);}}catch(e){}}
 async function load(){var u=await fetch("/api/users");var un=await fetch("/api/units");users=await u.json();allUnits=await un.json();render();}
-function render(){var g=document.getElementById("grid");document.getElementById("count").innerText=users.length+" usuarios";if(!users.length){g.innerHTML="<div class=muted>Nenhum usuario.</div>";return;}g.innerHTML=users.map(function(u){return"<div class=card><div class=row><div><div class=title>"+u.username+"</div><div class=muted>"+u.email+"</div><div id=units-"+u.user_id+" class=small style=margin-top:6px></div></div><div style=display:flex;gap:6px><button class=btn onclick=openEditModal("+u.user_id+")>Editar</button><button class=btn btn-danger onclick=deleteUser("+u.user_id+")>Excluir</button></div></div></div>"}).join("");users.forEach(function(u){fetch("/api/users/"+u.user_id+"/units").then(function(r){return r.json()}).then(function(us){var e=document.getElementById("units-"+u.user_id);if(!e)return;e.innerHTML=us.length?us.map(function(x){return"<span class=pill>"+x.name+"</span>"}).join(" "):"<span class=pill style=border-color:#f59e0b;color:#f59e0b>Sem unidade</span>"})});}
-function renderUnitCheckboxes(s){s=s||[];var c=document.getElementById("unitCheckboxes");if(!allUnits.length){c.innerHTML="<div class=muted>Crie em <a href=/unidades>Unidades</a>.</div>";return;}c.innerHTML=allUnits.map(function(u){return"<label><input type=checkbox name=unit value="+u.unit_id+" "+(s.indexOf(u.unit_id)>=0?"checked":"")+" /> "+u.name+"</label>"}).join("");}
+function roleLabel(u){if(u.is_admin)return"<span class='pill badge-admin'>Admin da Empresa</span>";if(u.is_unit_admin)return"<span class='pill badge-unitadmin'>Admin de Unidade</span>";return"<span class='pill badge-tech'>Tecnico</span>";}
+function canManage(){return myRole==="master"||myRole==="unit_admin";}
+function render(){var g=document.getElementById("grid");document.getElementById("count").innerText=users.length+" usuarios";if(!users.length){g.innerHTML="<div class=muted>Nenhum usuario.</div>";return;}g.innerHTML=users.map(function(u){var actions="";if(canManage()){actions="<div style=display:flex;gap:6px><button class=btn onclick=openEditModal("+u.user_id+")>Editar</button><button class='btn btn-danger' onclick=deleteUser("+u.user_id+")>Excluir</button></div>";}return"<div class=card><div class=row><div><div class=title>"+u.username+"</div><div class=muted>"+u.email+"</div><div style=margin-top:6px>"+roleLabel(u)+"</div><div id=units-"+u.user_id+" class=small style=margin-top:6px></div></div>"+actions+"</div></div>"}).join("");users.forEach(function(u){fetch("/api/users/"+u.user_id+"/units").then(function(r){return r.json()}).then(function(us){var e=document.getElementById("units-"+u.user_id);if(!e)return;e.innerHTML=us.length?us.map(function(x){return"<span class=pill>"+x.name+"</span>"}).join(" "):"<span class=pill style=border-color:#f59e0b;color:#f59e0b>Sem unidade</span>"})});}
+function renderUnitCheckboxes(s){s=s||[];var c=document.getElementById("unitCheckboxes");if(!allUnits.length){c.innerHTML="<div class=muted>Crie em <a href=/unidades>Unidades</a>.</div>";return;}var restrict=myUnitIds?myUnitIds.slice():null;c.innerHTML=allUnits.filter(function(u){return !restrict||restrict.indexOf(u.unit_id)>=0}).map(function(u){return"<label><input type=checkbox name=unit value="+u.unit_id+" "+(s.indexOf(u.unit_id)>=0?"checked":"")+" /> "+u.name+"</label>"}).join("");}
 function getSelectedUnitIds(){var c=document.querySelectorAll("input[name=unit]:checked");var ids=[];for(var i=0;i<c.length;i++)ids.push(parseInt(c[i].value));return ids;}
-function openCreateModal(){editingId=null;document.getElementById("modalTitle").innerText="Novo Usuario";document.getElementById("userName").value="";document.getElementById("userEmail").value="";document.getElementById("userPassword").value="";document.getElementById("userPassword").required=true;document.getElementById("passwordLabel").innerText="Senha *";document.getElementById("userAdmin").checked=false;renderUnitCheckboxes([]);document.getElementById("modal").style.display="flex";}
-function openEditModal(uid){editingId=uid;var u=users.find(function(x){return x.user_id===uid});if(!u)return;document.getElementById("modalTitle").innerText="Editar";document.getElementById("userName").value=u.username;document.getElementById("userEmail").value=u.email;document.getElementById("userPassword").value="";document.getElementById("userPassword").required=false;document.getElementById("passwordLabel").innerText="Senha (deixe vazio)";document.getElementById("userAdmin").checked=!!u.is_admin;fetch("/api/users/"+uid+"/units").then(function(r){return r.json()}).then(function(us){renderUnitCheckboxes(us.map(function(x){return x.unit_id}))});document.getElementById("modal").style.display="flex";}
+function openCreateModal(){editingId=null;document.getElementById("modalTitle").innerText="Novo Usuario";document.getElementById("userName").value="";document.getElementById("userEmail").value="";document.getElementById("userPassword").value="";document.getElementById("userPassword").required=true;document.getElementById("passwordLabel").innerText="Senha *";document.getElementById("userRole").value="tech";renderUnitCheckboxes([]);document.getElementById("modal").style.display="flex";}
+function openEditModal(uid){editingId=uid;var u=users.find(function(x){return x.user_id===uid});if(!u)return;document.getElementById("modalTitle").innerText="Editar";document.getElementById("userName").value=u.username;document.getElementById("userEmail").value=u.email;document.getElementById("userPassword").value="";document.getElementById("userPassword").required=false;document.getElementById("passwordLabel").innerText="Senha (deixe vazio)";document.getElementById("userRole").value=u.is_admin?"master":(u.is_unit_admin?"unit_admin":"tech");fetch("/api/users/"+uid+"/units").then(function(r){return r.json()}).then(function(us){renderUnitCheckboxes(us.map(function(x){return x.unit_id}))});document.getElementById("modal").style.display="flex";}
 function hideModal(){document.getElementById("modal").style.display="none";}
-async function saveUser(){var un=document.getElementById("userName").value.trim();var e=document.getElementById("userEmail").value.trim();var p=document.getElementById("userPassword").value;var a=document.getElementById("userAdmin").checked;var uid=getSelectedUnitIds();if(!un||!e){alert("Nome e email");return;}if(!editingId&&!p){alert("Senha");return;}if(p&&p.length<6){alert("Min 6");return;}var b={username:un,email:e,is_admin:a==true};if(p)b.password=p;var url="/api/users";if(editingId)url="/api/users/"+editingId;var r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});if(!r.ok){var err=await r.json();alert(err.error||"Erro");return;}var result=await r.json();var userId=editingId||result.user_id;if(userId){await fetch("/api/users/"+userId+"/units",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({unit_ids:uid})});}hideModal();await load();}
-async function deleteUser(id){if(!confirm("Excluir?"))return;await fetch("/api/users/"+id,{method:"DELETE"});await load();}
-load();
+async function saveUser(){var un=document.getElementById("userName").value.trim();var e=document.getElementById("userEmail").value.trim();var p=document.getElementById("userPassword").value;var role=document.getElementById("userRole").value;var uid=getSelectedUnitIds();if(!un||!e){alert("Preencha nome e email");return;}if(!editingId&&!p){alert("Informe a senha");return;}if(p&&p.length<6){alert("Senha deve ter no minimo 6 caracteres");return;}if(role!=="master"&&!uid.length){alert("Selecione pelo menos uma unidade para Tecnico/Admin de Unidade");return;}var b={username:un,email:e,is_admin:(role==="master"),is_unit_admin:(role==="unit_admin")};if(p)b.password=p;var url="/api/users";if(editingId)url="/api/users/"+editingId;var r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});if(!r.ok){var err=await r.json();alert(err.error||"Erro ao salvar");return;}var result=await r.json();var userId=editingId||result.user_id;if(userId){await fetch("/api/users/"+userId+"/units",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({unit_ids:uid})});}hideModal();await load();}
+async function deleteUser(id){if(!confirm("Excluir usuario?"))return;var r=await fetch("/api/users/"+id,{method:"DELETE"});if(!r.ok){var err=await r.json();alert(err.error||"Erro");return;}await load();}
+loadMe();load();
 </script></body></html>

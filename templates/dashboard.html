@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8" />
-<title>Dashboard - InvPro</title>
+<title>Dashboard - AtivoFix</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 body{font-family:Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:20px}
@@ -169,4 +169,7 @@ async function loadDashboard() {
   }
 }
 loadDashboard();
-</script></body></html>
+</script><script>
+fetch('/api/me').then(function(r){return r.json()}).then(function(m){if(m.role==='tech'){var sel=document.querySelectorAll('a[href="/usuarios"],a[href="/empresas"],a[href="/estrutura"],a[href="/scripts"]');for(var i=0;i<sel.length;i++){sel[i].style.display='none';}}}).catch(function(){});
+</script>
+</body></html>

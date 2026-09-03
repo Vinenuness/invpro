@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>Scripts - InvPro</title>
+  <title>Scripts - AtivoFix</title>
   <style>
     body{font-family:Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:20px}
     a{color:#38bdf8;text-decoration:none}
@@ -36,7 +36,7 @@
   <div class="box">
     <div class="top">
       <div>
-        <h2>Scripts - InvPro</h2>
+        <h2>Scripts - AtivoFix</h2>
         <div class="muted">Criar, editar, excluir e solicitar execução em um PC.</div>
       </div>
       <div class="row">
@@ -362,5 +362,8 @@ exit /b 0
     loadAll();
     setInterval(loadJobsForSelectedPc, 5000);
   </script>
+<script>
+fetch('/api/me').then(function(r){return r.json()}).then(function(m){if(m.role==='tech'){var sel=document.querySelectorAll('a[href="/usuarios"],a[href="/empresas"],a[href="/estrutura"],a[href="/scripts"]');for(var i=0;i<sel.length;i++){sel[i].style.display='none';}}}).catch(function(){});
+</script>
 </body>
 </html>

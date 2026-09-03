@@ -125,6 +125,7 @@ def init_db():
                 email TEXT NOT NULL,
                 password_hash TEXT NOT NULL,
                 is_admin INTEGER DEFAULT 0,
+                is_unit_admin INTEGER DEFAULT 0,
                 created_at TEXT,
                 UNIQUE(tenant_id, username)
             );
@@ -312,6 +313,7 @@ def migrate_db():
                 'ALTER TABLE tickets ADD COLUMN sla_due TEXT',
                 'ALTER TABLE tickets ADD COLUMN unit_id INTEGER',
                 'ALTER TABLE tickets ADD COLUMN location_id INTEGER',
+                'ALTER TABLE users ADD COLUMN is_unit_admin INTEGER DEFAULT 0',
             ]:
                 try:
                     conn.execute(stmt)
@@ -396,6 +398,67 @@ def require_login(f):
         session["last_activity"] = time()
         return f(*args, **kwargs)
     return decorated
+
+
+def current_user_access():
+    """Retorna (role, unit_ids) do usuário logado.
+    role: 'master' (admin da empresa - vê tudo) | 'unit_admin' | 'tech'
+    unit_ids: unidades permitidas (None = todas as unidades da empresa p/ master)
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        # Login master (admin/admin via env) -> vê toda a empresa
+        return "master", None
+    with get_db() as conn:
+        row = conn.execute("SELECT is_admin, is_unit_admin FROM users WHERE user_id = ?", (user_id,)).fetchone()
+    if row is None:
+        return "master", None
+    if row["is_admin"]:
+        return "master", None
+    with get_db() as conn:
+        rows = conn.execute("SELECT unit_id FROM user_units WHERE user_id = ?", (user_id,)).fetchall()
+    unit_ids = [r["unit_id"] for r in rows]
+    if row["is_unit_admin"]:
+        return "unit_admin", unit_ids
+    return "tech", unit_ids
+
+
+def unit_scope_clause(alias, agent_alias=None):
+    """Retorna (fragmento_sql, params) filtrando por unidades permitidas.
+    alias: alias da tabela que possui unit_id (ex: 'c').
+    Para master -> sem filtro. Para os demais -> unit_id IN (...).
+    """
+    role, unit_ids = current_user_access()
+    if role == "master":
+        return "", []
+    if not unit_ids:
+        return f" AND 1=0", []
+    ph = ",".join("?" * len(unit_ids))
+    return f" AND {alias}.unit_id IN ({ph})", unit_ids
+
+
+def computer_in_scope(agent_id):
+    """Verifica se o usuário pode acessar um computador específico."""
+    role, unit_ids = current_user_access()
+    if role == "master":
+        return True
+    with get_db() as conn:
+        row = conn.execute("SELECT unit_id FROM computers WHERE agent_id = ?", (agent_id,)).fetchone()
+    if not row:
+        return False
+    return row["unit_id"] in (unit_ids or [])
+
+
+def ticket_in_scope(ticket_id):
+    """Verifica se o usuário pode acessar um chamado específico."""
+    role, unit_ids = current_user_access()
+    if role == "master":
+        return True
+    with get_db() as conn:
+        row = conn.execute("SELECT unit_id FROM tickets WHERE ticket_id = ?", (ticket_id,)).fetchone()
+    if not row:
+        return False
+    return row["unit_id"] in (unit_ids or [])
 
 
 def serialize_computer(row, unit_name=None, location_name=None):
@@ -504,6 +567,114 @@ def logout():
 
 
 # ================================
+# RECUPERAÇÃO DE SENHA
+# ================================
+def _send_reset_email(to_email, reset_url, username):
+    """Envia e-mail com link de redefinição de senha"""
+    subject = "[AtivoFix] Redefinição de senha"
+    body = f"""<div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto">
+    <div style="background:linear-gradient(135deg,#38bdf8,#818cf8);padding:20px;border-radius:12px 12px 0 0;text-align:center">
+        <h1 style="color:white;margin:0">AtivoFix</h1>
+        <p style="color:rgba(255,255,255,.8);margin:4px 0 0">Redefinição de Senha</p>
+    </div>
+    <div style="background:#1e293b;padding:24px;border-radius:0 0 12px 12px;color:#e2e8f0">
+        <h2 style="margin:0 0 16px">Olá, {username}!</h2>
+        <p>Recebemos uma solicitação para redefinir a senha da sua conta no <strong>AtivoFix</strong>.</p>
+        <div style="background:rgba(51,65,85,.3);padding:12px;border-radius:8px;margin:16px 0">
+            <p style="margin:0;font-size:13px;color:#94a3b8">Clique no botão abaixo para criar uma nova senha. O link expira em <strong>30 minutos</strong>.</p>
+        </div>
+        <div style="text-align:center;margin:24px 0">
+            <a href="{reset_url}" style="background:linear-gradient(135deg,#38bdf8,#818cf8);color:white;text-decoration:none;padding:12px 28px;border-radius:10px;font-weight:bold;display:inline-block">Redefinir minha senha</a>
+        </div>
+        <p style="font-size:13px;color:#94a3b8">Se o botão não funcionar, copie e cole este link no navegador:</p>
+        <p style="font-size:12px;color:#64748b;word-break:break-all">{reset_url}</p>
+        <p style="font-size:12px;color:#64748b;margin-top:16px">Se você não solicitou esta redefinição, ignore este e-mail — sua senha permanece segura.</p>
+    </div>
+</div>"""
+    return send_email(to_email, subject, body)
+
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password_page():
+    """Tela que pede o e-mail cadastrado e envia link de redefinição"""
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+        if not email:
+            return render_template("forgot_password.html", error="Informe seu e-mail cadastrado.")
+        with get_db() as conn:
+            user = conn.execute(
+                "SELECT user_id, username, email FROM users WHERE lower(email) = lower(?)",
+                (email,)
+            ).fetchone()
+        # Sempre mostra mensagem genérica (não revela se o e-mail existe)
+        if user:
+            import secrets
+            token = secrets.token_urlsafe(48)
+            expires_at = utc_now_iso()
+            with get_db() as conn:
+                conn.execute(
+                    "INSERT INTO password_resets (token, email, created_at, used) VALUES (?, ?, ?, 0)",
+                    (token, email, expires_at)
+                )
+                conn.commit()
+            reset_url = url_for("reset_password_page", token=token, _external=True)
+            sent = _send_reset_email(email, reset_url, user["username"])
+            logger.info(f"Link de redefinição enviado para {email} (sent={sent})")
+            if not sent:
+                # Sem SMTP configurado: loga o link para o admin conseguir testar
+                logger.warning(f"SMTP não configurado. Link de redefinição: {reset_url}")
+                return render_template(
+                    "forgot_password.html",
+                    error="Não foi possível enviar o e-mail: servidor SMTP não configurado. Fale com o administrador.",
+                    dev_link=reset_url,
+                )
+        return render_template("forgot_password.html",
+                               success="Se o e-mail estiver cadastrado, você receberá um link de redefinição em instantes.")
+    return render_template("forgot_password.html")
+
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password_page(token):
+    """Tela que valida o token e define a nova senha"""
+    from time import time as _time
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM password_resets WHERE token = ? AND used = 0",
+            (token,)
+        ).fetchone()
+    if not row:
+        return render_template("reset_password.html", error="Link inválido ou já utilizado. Solicite um novo link de redefinição.")
+    # Expira em 30 minutos
+    try:
+        from datetime import datetime as _dt
+        created = _dt.fromisoformat(row["created_at"])
+        age_seconds = (_dt.now().timestamp() - created.timestamp())
+        if age_seconds > 1800:
+            return render_template("reset_password.html", error="Este link expirou. Solicite um novo link de redefinição.")
+    except Exception:
+        pass
+
+    if request.method == "POST":
+        password = (request.form.get("password") or "")
+        confirm = (request.form.get("confirm") or "")
+        if len(password) < 6:
+            return render_template("reset_password.html", token=token, error="A senha deve ter pelo menos 6 caracteres.")
+        if password != confirm:
+            return render_template("reset_password.html", token=token, error="As senhas não coincidem.")
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE users SET password_hash = ? WHERE lower(email) = lower(?)",
+                (bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode(), row["email"])
+            )
+            conn.execute("UPDATE password_resets SET used = 1 WHERE token = ?", (token,))
+            conn.commit()
+        logger.info(f"Senha redefinida para {row['email']}")
+        return render_template("reset_password.html",
+                               success="Senha redefinida com sucesso! Você já pode entrar com a nova senha.")
+    return render_template("reset_password.html", token=token)
+
+
+# ================================
 # ROTAS PRINCIPAIS (PROTEGIDAS)
 # ================================
 @app.route("/")
@@ -527,6 +698,8 @@ def detalhe(agent_id):
 @app.route("/pc/<agent_id>")
 @require_login
 def pc_detail(agent_id):
+    if not computer_in_scope(agent_id):
+        return jsonify({"error": "sem acesso a este computador"}), 403
     with get_db() as conn:
         row = conn.execute(
             "SELECT * FROM computers WHERE agent_id = ?", (agent_id,)
@@ -539,6 +712,8 @@ def pc_detail(agent_id):
 @app.route("/pc/<agent_id>/delete", methods=["POST"])
 @require_login
 def pc_delete(agent_id):
+    if not computer_in_scope(agent_id):
+        return jsonify({"error": "sem acesso a este computador"}), 403
     with get_db() as conn:
         row = conn.execute(
             "SELECT device_uid FROM computers WHERE agent_id = ?", (agent_id,)
@@ -560,28 +735,34 @@ def pc_delete(agent_id):
 @require_login
 def api_computers():
     tid = get_current_tenant()
+    extra, extra_params = unit_scope_clause("c")
     with get_db() as conn:
         rows = conn.execute(
             """SELECT c.*, u.name as unit_name, l.name as location_name
                FROM computers c 
                LEFT JOIN units u ON c.unit_id = u.unit_id 
                LEFT JOIN locations l ON c.location_id = l.location_id
-               WHERE c.tenant_id = ?
+               WHERE c.tenant_id = ?""" + extra + """
                ORDER BY c.last_seen DESC, c.hostname ASC""",
-            (tid,)
+            [tid] + extra_params
         ).fetchall()
     return jsonify({"computers": [serialize_computer(r, r["unit_name"]) for r in rows]})
 
 
 @app.route("/dados")
+@require_login
 def dados():
+    tid = get_current_tenant()
+    extra, extra_params = unit_scope_clause("c")
     with get_db() as conn:
         rows = conn.execute(
             """SELECT c.*, u.name as unit_name, l.name as location_name
                FROM computers c 
                LEFT JOIN units u ON c.unit_id = u.unit_id 
                LEFT JOIN locations l ON c.location_id = l.location_id
-               ORDER BY c.last_seen DESC, c.hostname ASC"""
+               WHERE c.tenant_id = ?""" + extra + """
+               ORDER BY c.last_seen DESC, c.hostname ASC""",
+            [tid] + extra_params
         ).fetchall()
     return jsonify([serialize_computer(r, r["unit_name"]) for r in rows])
 
@@ -593,6 +774,8 @@ def api_alias():
     alias = (data.get("alias") or "").strip()
     if not agent_id:
         return jsonify({"error": "agent_id is required"}), 400
+    if not computer_in_scope(agent_id):
+        return jsonify({"error": "sem acesso a este computador"}), 403
     with get_db() as conn:
         conn.execute("UPDATE computers SET alias = ? WHERE agent_id = ?", (alias, agent_id))
         conn.commit()
@@ -796,15 +979,31 @@ def api_units_list():
     # Support tenant_id from query param (for public portal) or session
     tid_param = request.args.get("tenant_id")
     if tid_param:
-        # Public portal: filter by tenant_id
         with get_db() as conn:
             rows = conn.execute("SELECT * FROM units WHERE tenant_id = ? ORDER BY name", (tid_param,)).fetchall()
         return jsonify([dict(r) for r in rows])
-    # Admin: show all units with tenant name
+    # env master (admin/admin sem user_id) -> visão plataforma (todas as empresas)
+    # DB is_admin=1 -> somente a própria empresa; unit admin/tech -> só vinculadas
+    tid = get_current_tenant()
+    role, unit_ids = current_user_access()
     with get_db() as conn:
-        rows = conn.execute("""SELECT u.*, t.name as tenant_name FROM units u 
-            LEFT JOIN tenants t ON u.tenant_id = t.tenant_id 
-            ORDER BY t.name, u.name""").fetchall()
+        if role == "master" and not session.get("user_id"):
+            rows = conn.execute("""SELECT u.*, t.name as tenant_name FROM units u
+                LEFT JOIN tenants t ON u.tenant_id = t.tenant_id
+                ORDER BY t.name, u.name""").fetchall()
+        elif role == "master":
+            rows = conn.execute("""SELECT u.*, t.name as tenant_name FROM units u
+                LEFT JOIN tenants t ON u.tenant_id = t.tenant_id
+                WHERE u.tenant_id = ?
+                ORDER BY t.name, u.name""", (tid,)).fetchall()
+        elif unit_ids:
+            ph = ",".join("?" * len(unit_ids))
+            rows = conn.execute(f"""SELECT u.*, t.name as tenant_name FROM units u
+                LEFT JOIN tenants t ON u.tenant_id = t.tenant_id
+                WHERE u.unit_id IN ({ph})
+                ORDER BY u.name""", unit_ids).fetchall()
+        else:
+            rows = []
     return jsonify([dict(r) for r in rows])
 
 
@@ -812,6 +1011,10 @@ def api_units_list():
 @require_login
 def api_units_create():
     data = request.get_json(silent=True) or {}
+    role, _ = current_user_access()
+    if role != "master":
+        return jsonify({"error": "somente admin master pode gerenciar unidades"}), 403
+
     name = (data.get("name") or "").strip()
     description = (data.get("description") or "").strip()
     if not name:
@@ -838,6 +1041,10 @@ def api_units_create():
 @require_login
 def api_units_update(unit_id):
     data = request.get_json(silent=True) or {}
+    role, _ = current_user_access()
+    if role != "master":
+        return jsonify({"error": "somente admin master pode gerenciar unidades"}), 403
+
     name = (data.get("name") or "").strip()
     description = (data.get("description") or "").strip()
     if not name:
@@ -857,6 +1064,9 @@ def api_units_update(unit_id):
 @app.route("/api/units/<int:unit_id>", methods=["DELETE"])
 @require_login
 def api_units_delete(unit_id):
+    role, _ = current_user_access()
+    if role != "master":
+        return jsonify({"error": "somente admin master pode gerenciar unidades"}), 403
     with get_db() as conn:
         conn.execute("DELETE FROM user_units WHERE unit_id = ?", (unit_id,))
         conn.execute("UPDATE computers SET location_id = NULL WHERE location_id IN (SELECT location_id FROM locations WHERE unit_id = ?)", (unit_id,))
@@ -876,16 +1086,33 @@ def api_units_delete(unit_id):
 def api_locations_list():
     unit_id = request.args.get("unit_id")
     tid = get_current_tenant()
+    role, my_unit_ids = current_user_access()
+    # when listing from tenant pages, restrict per user scope
     with get_db() as conn:
         if unit_id:
+            # unit admin/tech só acessa locais das próprias unidades
+            if role != "master":
+                int_uid = int(unit_id)
+                if int_uid not in (my_unit_ids or []):
+                    return jsonify([])
             rows = conn.execute(
                 "SELECT l.*, u.name as unit_name FROM locations l LEFT JOIN units u ON l.unit_id = u.unit_id WHERE l.unit_id = ? ORDER BY l.name",
                 (unit_id,)
             ).fetchall()
         else:
-            rows = conn.execute(
-                "SELECT l.*, u.name as unit_name FROM locations l LEFT JOIN units u ON l.unit_id = u.unit_id ORDER BY u.name, l.name"
-            ).fetchall()
+            if role == "master":
+                rows = conn.execute(
+                    "SELECT l.*, u.name as unit_name FROM locations l LEFT JOIN units u ON l.unit_id = u.unit_id WHERE u.tenant_id = ? ORDER BY u.name, l.name",
+                    (tid,)
+                ).fetchall()
+            elif my_unit_ids:
+                ph = ",".join("?" * len(my_unit_ids))
+                rows = conn.execute(
+                    "SELECT l.*, u.name as unit_name FROM locations l LEFT JOIN units u ON l.unit_id = u.unit_id WHERE l.unit_id IN (" + ph + ") ORDER BY u.name, l.name",
+                    my_unit_ids
+                ).fetchall()
+            else:
+                rows = []
     return jsonify([dict(r) for r in rows])
 
 
@@ -893,6 +1120,10 @@ def api_locations_list():
 @require_login
 def api_locations_create():
     data = request.get_json(silent=True) or {}
+    role, _ = current_user_access()
+    if role != "master":
+        return jsonify({"error": "somente admin master pode gerenciar locais"}), 403
+
     unit_id = data.get("unit_id")
     name = (data.get("name") or "").strip()
     description = (data.get("description") or "").strip()
@@ -922,6 +1153,10 @@ def api_locations_create():
 @require_login
 def api_locations_update(location_id):
     data = request.get_json(silent=True) or {}
+    role, _ = current_user_access()
+    if role != "master":
+        return jsonify({"error": "somente admin master pode gerenciar locais"}), 403
+
     name = (data.get("name") or "").strip()
     description = (data.get("description") or "").strip()
     if not name:
@@ -941,6 +1176,9 @@ def api_locations_update(location_id):
 @app.route("/api/locations/<int:location_id>", methods=["DELETE"])
 @require_login
 def api_locations_delete(location_id):
+    role, _ = current_user_access()
+    if role != "master":
+        return jsonify({"error": "somente admin master pode gerenciar locais"}), 403
     with get_db() as conn:
         conn.execute("UPDATE computers SET location_id = NULL WHERE location_id = ?", (location_id,))
         conn.execute("DELETE FROM locations WHERE location_id = ?", (location_id,))
@@ -952,6 +1190,11 @@ def api_locations_delete(location_id):
 @app.route("/api/computers/<agent_id>/location", methods=["POST"])
 @require_login
 def api_computer_set_location(agent_id):
+    role, _ = current_user_access()
+    if not computer_in_scope(agent_id):
+        return jsonify({"error": "sem acesso a este computador"}), 403
+    if role == "tech":
+        return jsonify({"error": "somente admins podem alterar local"}), 403
     data = request.get_json(silent=True) or {}
     location_id = data.get("location_id")
     with get_db() as conn:
@@ -981,27 +1224,88 @@ def locais_page():
 # ================================
 # API - USUARIOS
 # ================================
+@app.route("/api/me", methods=["GET"])
+@require_login
+def api_me():
+    role, unit_ids = current_user_access()
+    tid = get_current_tenant()
+    with get_db() as conn:
+        units = []
+        if unit_ids is None:
+            if role == "master" and not session.get("user_id"):
+                rows = conn.execute("SELECT unit_id, name FROM units ORDER BY name").fetchall()
+            else:
+                rows = conn.execute("SELECT unit_id, name FROM units WHERE tenant_id = ? ORDER BY name", (tid,)).fetchall()
+            units = [{"unit_id": r["unit_id"], "name": r["name"]} for r in rows]
+        elif unit_ids:
+            ph = ",".join("?" * len(unit_ids))
+            rows = conn.execute(f"SELECT unit_id, name FROM units WHERE unit_id IN ({ph}) ORDER BY name", unit_ids).fetchall()
+            units = [{"unit_id": r["unit_id"], "name": r["name"]} for r in rows]
+        tenant = conn.execute("SELECT name FROM tenants WHERE tenant_id = ?", (tid,)).fetchone()
+    return jsonify({
+        "user": session.get("user"),
+        "user_id": session.get("user_id"),
+        "tenant_id": tid,
+        "tenant_name": tenant["name"] if tenant else "",
+        "role": role,
+        "unit_ids": unit_ids,
+        "units": units,
+        "is_master": role == "master",
+        "is_unit_admin": role == "unit_admin",
+    })
+
+
 @app.route("/api/users", methods=["GET"])
 @require_login
 def api_users_list():
+    role, unit_ids = current_user_access()
     tid = get_current_tenant()
     with get_db() as conn:
-        rows = conn.execute(
-            "SELECT user_id, username, email, is_admin, created_at FROM users WHERE tenant_id = ? ORDER BY username",
-            (tid,)
-        ).fetchall()
+        if role == "master":
+            rows = conn.execute(
+                "SELECT user_id, username, email, is_admin, is_unit_admin, created_at FROM users WHERE tenant_id = ? ORDER BY username",
+                (tid,)
+            ).fetchall()
+        else:
+            # unit_admin/tech: só usuários vinculados às unidades permitidas
+            if not unit_ids:
+                return jsonify([])
+            ph = ",".join("?" * len(unit_ids))
+            rows = conn.execute(
+                f"""SELECT DISTINCT u.user_id, u.username, u.email, u.is_admin, u.is_unit_admin, u.created_at
+                    FROM users u
+                    JOIN user_units uu ON uu.user_id = u.user_id
+                    WHERE u.tenant_id = ? AND uu.unit_id IN ({ph})
+                    ORDER BY u.username""",
+                [tid] + unit_ids
+            ).fetchall()
     return jsonify([dict(r) for r in rows])
 
 
 @app.route("/api/users", methods=["POST"])
 @require_login
 def api_users_create():
-    import hashlib
+    role, my_unit_ids = current_user_access()
+    if role == "tech":
+        return jsonify({"error": "sem permissão para criar usuários"}), 403
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
     email = (data.get("email") or "").strip()
     password = data.get("password") or ""
     is_admin = 1 if data.get("is_admin") else 0
+    is_unit_admin = 1 if data.get("is_unit_admin") else 0
+    unit_ids = data.get("unit_ids") or []
+    # unit_admin só pode criar usuários dentro das próprias unidades e nunca master
+    if role == "unit_admin":
+        if is_admin:
+            return jsonify({"error": "admin da unidade não pode criar admin master"}), 403
+        if not my_unit_ids:
+            return jsonify({"error": "sua conta não está vinculada a nenhuma unidade"}), 403
+        allowed = set(my_unit_ids)
+        if unit_ids and not set(unit_ids).issubset(allowed):
+            return jsonify({"error": "você só pode vincular usuários às suas unidades"}), 403
+        if not unit_ids:
+            unit_ids = list(allowed)
     if not username or not email or not password:
         return jsonify({"error": "username, email and password are required"}), 400
     password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -1011,11 +1315,17 @@ def api_users_create():
         try:
             tid = get_current_tenant()
             conn.execute(
-                "INSERT INTO users (username, email, password_hash, is_admin, tenant_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (username, email, password_hash, is_admin, tid, now)
+                "INSERT INTO users (username, email, password_hash, is_admin, is_unit_admin, tenant_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (username, email, password_hash, is_admin, is_unit_admin, tid, now)
             )
             conn.commit()
             user_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            for u in (unit_ids or []):
+                conn.execute(
+                    "INSERT INTO user_units (user_id, unit_id, tenant_id) VALUES (?, ?, ?)",
+                    (user_id, int(u), tid)
+                )
+            conn.commit()
         except Exception as e:
             if "UNIQUE" in str(e):
                 return jsonify({"error": "username already exists"}), 400
@@ -1027,25 +1337,39 @@ def api_users_create():
 @app.route("/api/users/<int:user_id>", methods=["POST"])
 @require_login
 def api_users_update(user_id):
-    import hashlib
+    role, my_unit_ids = current_user_access()
+    if role == "tech":
+        return jsonify({"error": "sem permissão para editar usuários"}), 403
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
     email = (data.get("email") or "").strip()
     password = data.get("password") or ""
     is_admin = 1 if data.get("is_admin") else 0
+    is_unit_admin = 1 if data.get("is_unit_admin") else 0
     if not username or not email:
         return jsonify({"error": "username and email are required"}), 400
     with get_db() as conn:
+        # confere acesso: unit_admin só gerencia usuários das próprias unidades
+        if role == "unit_admin":
+            row = conn.execute(
+                """SELECT COUNT(*) as cnt FROM user_units
+                   WHERE user_id = ? AND unit_id IN (%s)""" % (",".join("?" * len(my_unit_ids))),
+                [user_id] + list(my_unit_ids)
+            ).fetchone()
+            if not row or row["cnt"] == 0:
+                return jsonify({"error": "sem acesso a este usuário"}), 403
+            if is_admin:
+                return jsonify({"error": "admin da unidade não pode promover admin master"}), 403
         if password:
-            password_hash = hashlib.sha256(password.encode()).hexdigest()
+            password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
             result = conn.execute(
-                "UPDATE users SET username = ?, email = ?, password_hash = ?, is_admin = ? WHERE user_id = ?",
-                (username, email, password_hash, is_admin, user_id)
+                "UPDATE users SET username = ?, email = ?, password_hash = ?, is_admin = ?, is_unit_admin = ? WHERE user_id = ?",
+                (username, email, password_hash, is_admin, is_unit_admin, user_id)
             )
         else:
             result = conn.execute(
-                "UPDATE users SET username = ?, email = ?, is_admin = ? WHERE user_id = ?",
-                (username, email, is_admin, user_id)
+                "UPDATE users SET username = ?, email = ?, is_admin = ?, is_unit_admin = ? WHERE user_id = ?",
+                (username, email, is_admin, is_unit_admin, user_id)
             )
         conn.commit()
     if result.rowcount == 0:
@@ -1057,7 +1381,20 @@ def api_users_update(user_id):
 @app.route("/api/users/<int:user_id>", methods=["DELETE"])
 @require_login
 def api_users_delete(user_id):
+    role, my_unit_ids = current_user_access()
+    if role == "tech":
+        return jsonify({"error": "sem permissão para excluir usuários"}), 403
+    if session.get("user_id") == user_id:
+        return jsonify({"error": "você não pode excluir a própria conta"}), 400
     with get_db() as conn:
+        if role == "unit_admin":
+            row = conn.execute(
+                """SELECT COUNT(*) as cnt FROM user_units
+                   WHERE user_id = ? AND unit_id IN (%s)""" % (",".join("?" * len(my_unit_ids))),
+                [user_id] + list(my_unit_ids)
+            ).fetchone()
+            if not row or row["cnt"] == 0:
+                return jsonify({"error": "sem acesso a este usuário"}), 403
         conn.execute("DELETE FROM user_units WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
         conn.commit()
@@ -1071,8 +1408,16 @@ def api_users_delete(user_id):
 @app.route("/api/computers/<agent_id>/unit", methods=["POST"])
 @require_login
 def api_computer_set_unit(agent_id):
+    role, unit_ids = current_user_access()
+    if role == "tech":
+        return jsonify({"error": "somente admins podem alterar unidade"}), 403
     data = request.get_json(silent=True) or {}
     unit_id = data.get("unit_id")
+    # unit_admin só pode vincular a computador de unidade que administra
+    if role == "unit_admin":
+        target = unit_id
+        if target is not None and target not in (unit_ids or []):
+            return jsonify({"error": "sem acesso a esta unidade"}), 403
     with get_db() as conn:
         if unit_id:
             result = conn.execute(
@@ -1097,7 +1442,19 @@ def api_computer_set_unit(agent_id):
 @app.route("/api/users/<int:user_id>/units", methods=["GET"])
 @require_login
 def api_user_units_list(user_id):
+    role, my_unit_ids = current_user_access()
     with get_db() as conn:
+        if role != "master":
+            if not my_unit_ids:
+                return jsonify([])
+            ph = ",".join("?" * len(my_unit_ids))
+            row = conn.execute(
+                f"""SELECT COUNT(*) as cnt FROM user_units
+                    WHERE user_id = ? AND unit_id IN ({ph})""",
+                [user_id] + list(my_unit_ids)
+            ).fetchone()
+            if not row or row["cnt"] == 0:
+                return jsonify([])
         rows = conn.execute(
             "SELECT u.unit_id, u.name, u.description FROM user_units uu JOIN units u ON u.unit_id = uu.unit_id WHERE uu.user_id = ? ORDER BY u.name",
             (user_id,)
@@ -1108,14 +1465,35 @@ def api_user_units_list(user_id):
 @app.route("/api/users/<int:user_id>/units", methods=["POST"])
 @require_login
 def api_user_units_set(user_id):
+    role, my_unit_ids = current_user_access()
+    if role == "tech":
+        return jsonify({"error": "sem permissão para editar usuários"}), 403
     data = request.get_json(silent=True) or {}
-    unit_ids = data.get("unit_ids") or []
+    unit_ids = [int(x) for x in (data.get("unit_ids") or [])]
+    tid = get_current_tenant()
     with get_db() as conn:
+        if role == "unit_admin":
+            allowed = set(my_unit_ids)
+            if not set(unit_ids).issubset(allowed):
+                return jsonify({"error": "você só pode vincular usuários às suas unidades"}), 403
+            ph = ",".join("?" * len(my_unit_ids))
+            trow = conn.execute(
+                f"SELECT COUNT(*) as cnt FROM user_units WHERE user_id = ? AND unit_id IN ({ph})",
+                [user_id] + list(my_unit_ids)
+            ).fetchone()
+            if not trow or trow["cnt"] == 0:
+                return jsonify({"error": "sem acesso a este usuário"}), 403
+        # confere que as unidades pertencem à empresa
+        if unit_ids:
+            ph = ",".join("?" * len(unit_ids))
+            cnt = conn.execute(f"SELECT COUNT(*) as cnt FROM units WHERE unit_id IN ({ph}) AND tenant_id = ?", unit_ids + [tid]).fetchone()["cnt"]
+            if cnt != len(set(unit_ids)):
+                return jsonify({"error": "unidade inválida"}), 400
         conn.execute("DELETE FROM user_units WHERE user_id = ?", (user_id,))
         for unit_id in unit_ids:
             conn.execute(
-                "INSERT INTO user_units (user_id, unit_id) VALUES (?, ?)",
-                (user_id, unit_id)
+                "INSERT INTO user_units (user_id, unit_id, tenant_id) VALUES (?, ?, ?) ON CONFLICT(user_id, unit_id) DO NOTHING",
+                (user_id, unit_id, tid)
             )
         conn.commit()
     logger.info(f"Unidades do usuario {user_id} atualizadas")
@@ -1141,8 +1519,14 @@ def usuarios_page():
 @app.route("/api/tenants", methods=["GET"])
 @require_login
 def api_tenants_list():
+    role, _ = current_user_access()
+    if role == "tech":
+        return jsonify({"error": "sem permissão"}), 403
     with get_db() as conn:
-        rows = conn.execute("SELECT * FROM tenants ORDER BY name").fetchall()
+        if not session.get("user_id"):
+            rows = conn.execute("SELECT * FROM tenants ORDER BY name").fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM tenants WHERE tenant_id = ? ORDER BY name", (get_current_tenant(),)).fetchall()
     return jsonify([dict(r) for r in rows])
 
 
@@ -1150,6 +1534,10 @@ def api_tenants_list():
 @require_login
 def api_tenants_create():
     data = request.get_json(silent=True) or {}
+    role, _ = current_user_access()
+    if role != "master":
+        return jsonify({"error": "somente admin master pode gerenciar empresas"}), 403
+
     name = (data.get("name") or "").strip()
     slug = (data.get("slug") or "").strip().lower().replace(" ", "-")
     description = (data.get("description") or "").strip()
@@ -1175,6 +1563,10 @@ def api_tenants_create():
 @require_login
 def api_tenants_update(tenant_id):
     data = request.get_json(silent=True) or {}
+    role, _ = current_user_access()
+    if role != "master":
+        return jsonify({"error": "somente admin master pode gerenciar empresas"}), 403
+
     name = (data.get("name") or "").strip()
     description = (data.get("description") or "").strip()
     if not name:
@@ -1193,6 +1585,9 @@ def api_tenants_update(tenant_id):
 @app.route("/api/tenants/<int:tenant_id>", methods=["DELETE"])
 @require_login
 def api_tenants_delete(tenant_id):
+    role, _ = current_user_access()
+    if role != "master":
+        return jsonify({"error": "somente admin master pode gerenciar empresas"}), 403
     if tenant_id == 1:
         return jsonify({"error": "cannot delete default tenant"}), 400
     with get_db() as conn:
@@ -1231,30 +1626,75 @@ def estrutura_js():
 @app.route("/api/dashboard", methods=["GET"])
 @require_login
 def api_dashboard():
+    tid = get_current_tenant()
+    role, unit_ids = current_user_access()
+    extra, extra_params = unit_scope_clause("c")
+    unit_ph = ""
+    unit_params = []
+    if role != "master" and unit_ids:
+        unit_ph = ",".join("?" * len(unit_ids))
+        unit_params = unit_ids
     with get_db() as conn:
-        total = conn.execute("SELECT COUNT(*) as cnt FROM computers").fetchone()["cnt"]
-        units = conn.execute("SELECT COUNT(*) as cnt FROM units").fetchone()["cnt"]
-        users_count = conn.execute("SELECT COUNT(*) as cnt FROM users").fetchone()["cnt"]
-        scripts_count = conn.execute("SELECT COUNT(*) as cnt FROM scripts").fetchone()["cnt"]
+        total = conn.execute("SELECT COUNT(*) as cnt FROM computers c WHERE c.tenant_id = ?" + extra, [tid] + extra_params).fetchone()["cnt"]
+        if role == "master":
+            units = conn.execute("SELECT COUNT(*) as cnt FROM units WHERE tenant_id = ?", (tid,)).fetchone()["cnt"]
+            users_count = conn.execute("SELECT COUNT(*) as cnt FROM users WHERE tenant_id = ?", (tid,)).fetchone()["cnt"]
+        elif unit_ids:
+            ph = ",".join("?" * len(unit_ids))
+            units = conn.execute("SELECT COUNT(*) as cnt FROM units WHERE tenant_id = ? AND unit_id IN (" + ph + ")", [tid] + unit_ids).fetchone()["cnt"]
+            users_count = conn.execute("SELECT COUNT(DISTINCT u.user_id) as cnt FROM users u JOIN user_units uu ON uu.user_id = u.user_id WHERE u.tenant_id = ? AND uu.unit_id IN (" + ph + ")", [tid] + unit_ids).fetchone()["cnt"]
+        else:
+            units = 0
+            users_count = 0
+        scripts_count = conn.execute("SELECT COUNT(*) as cnt FROM scripts WHERE tenant_id = ?", (tid,)).fetchone()["cnt"]
         
         # PCs per unit
-        per_unit = conn.execute("""
-            SELECT COALESCE(u.name, 'Sem unidade') as unit_name, COUNT(*) as cnt
-            FROM computers c LEFT JOIN units u ON c.unit_id = u.unit_id
-            GROUP BY c.unit_id ORDER BY cnt DESC
-        """).fetchall()
+        if role == "master":
+            per_unit = conn.execute("""
+                SELECT COALESCE(u.name, 'Sem unidade') as unit_name, COUNT(*) as cnt
+                FROM computers c LEFT JOIN units u ON c.unit_id = u.unit_id
+                WHERE c.tenant_id = ?
+                GROUP BY c.unit_id ORDER BY cnt DESC
+            """, (tid,)).fetchall()
+        elif unit_ids:
+            per_unit = conn.execute("""
+                SELECT COALESCE(u.name, 'Sem unidade') as unit_name, COUNT(*) as cnt
+                FROM computers c LEFT JOIN units u ON c.unit_id = u.unit_id
+                WHERE c.tenant_id = ? AND c.unit_id IN (""" + unit_ph + """)
+                GROUP BY c.unit_id ORDER BY cnt DESC
+            """, [tid] + unit_params).fetchall()
+        else:
+            per_unit = []
         
         # Recent jobs
-        recent_jobs = conn.execute("""
-            SELECT j.job_id, j.status, j.created_at, s.name as script_name, c.hostname
-            FROM jobs j 
-            LEFT JOIN scripts s ON s.script_id = j.script_id
-            LEFT JOIN computers c ON c.device_uid = j.device_uid
-            ORDER BY j.created_at DESC LIMIT 10
-        """).fetchall()
+        if role == "master":
+            recent_jobs = conn.execute("""
+                SELECT j.job_id, j.status, j.created_at, s.name as script_name, c.hostname
+                FROM jobs j 
+                LEFT JOIN scripts s ON s.script_id = j.script_id
+                LEFT JOIN computers c ON c.device_uid = j.device_uid
+                WHERE c.tenant_id = ?
+                ORDER BY j.created_at DESC LIMIT 10
+            """, (tid,)).fetchall()
+        elif unit_ids:
+            recent_jobs = conn.execute("""
+                SELECT j.job_id, j.status, j.created_at, s.name as script_name, c.hostname
+                FROM jobs j 
+                LEFT JOIN scripts s ON s.script_id = j.script_id
+                LEFT JOIN computers c ON c.device_uid = j.device_uid
+                WHERE c.tenant_id = ? AND c.unit_id IN (""" + unit_ph + """)
+                ORDER BY j.created_at DESC LIMIT 10
+            """, [tid] + unit_params).fetchall()
+        else:
+            recent_jobs = []
         
         # Agent stats from payload
-        computers_data = conn.execute("SELECT payload_json, last_seen, unit_id FROM computers").fetchall()
+        if role == "master":
+            computers_data = conn.execute("SELECT payload_json, last_seen, unit_id FROM computers WHERE tenant_id = ?", (tid,)).fetchall()
+        elif unit_ids:
+            computers_data = conn.execute("SELECT payload_json, last_seen, unit_id FROM computers WHERE tenant_id = ? AND unit_id IN (" + unit_ph + ")", [tid] + unit_params).fetchall()
+        else:
+            computers_data = []
         cpu_avg = 0
         ram_avg = 0
         disk_total = 0
@@ -1321,14 +1761,15 @@ def api_dashboard():
 @require_login
 def api_alerts_list():
     tid = get_current_tenant()
+    extra, extra_params = unit_scope_clause("c")
     with get_db() as conn:
         rows = conn.execute(
             """SELECT a.*, c.hostname, c.tag_evo 
                FROM alerts a 
                LEFT JOIN computers c ON a.agent_id = c.agent_id
-               WHERE a.tenant_id = ? 
+               WHERE a.tenant_id = ?""" + extra + """
                ORDER BY a.created_at DESC LIMIT 50""",
-            (tid,)
+            [tid] + extra_params
         ).fetchall()
     return jsonify([dict(r) for r in rows])
 
@@ -1408,21 +1849,22 @@ def api_alerts_check_offline():
 def api_export_csv():
     import io, csv
     unit_name = request.args.get("unit_name", "").strip()
+    extra, extra_params = unit_scope_clause("c")
     with get_db() as conn:
         if unit_name:
             rows = conn.execute("""
                 SELECT c.hostname, c.alias, c.tag_evo, c.last_seen, c.unit_id,
                        u.name as unit_name, c.payload_json
                 FROM computers c LEFT JOIN units u ON c.unit_id = u.unit_id
-                WHERE u.name = ? ORDER BY c.hostname
-            """, (unit_name,)).fetchall()
+                WHERE u.name = ?""" + extra + " ORDER BY c.hostname",
+                [unit_name] + extra_params).fetchall()
         else:
             rows = conn.execute("""
                 SELECT c.hostname, c.alias, c.tag_evo, c.last_seen, c.unit_id,
                        u.name as unit_name, c.payload_json
                 FROM computers c LEFT JOIN units u ON c.unit_id = u.unit_id
-                ORDER BY c.hostname
-            """).fetchall()
+                WHERE 1=1""" + extra + " ORDER BY c.hostname",
+                extra_params).fetchall()
     
     output = io.StringIO()
     writer = csv.writer(output)
@@ -1468,18 +1910,20 @@ def api_export_pdf():
     from fpdf import FPDF
     import io
     
+    extra, extra_params = unit_scope_clause("c")
     with get_db() as conn:
         # Get all units with PC counts
         units_data = conn.execute("""
             SELECT COALESCE(u.name, 'Sem unidade') as unit_name, COUNT(*) as pc_count
             FROM computers c 
             LEFT JOIN units u ON c.unit_id = u.unit_id
+            WHERE 1=1""" + extra + """
             GROUP BY c.unit_id 
             ORDER BY pc_count DESC
-        """).fetchall()
+        """, extra_params).fetchall()
         
         # Get total
-        total = conn.execute("SELECT COUNT(*) as cnt FROM computers").fetchone()["cnt"]
+        total = conn.execute("SELECT COUNT(*) as cnt FROM computers c WHERE 1=1" + extra, extra_params).fetchone()["cnt"]
         
         # Get all computers with details per unit
         all_computers = conn.execute("""
@@ -1487,8 +1931,9 @@ def api_export_pdf():
                    COALESCE(u.name, 'Sem unidade') as unit_name, c.payload_json
             FROM computers c 
             LEFT JOIN units u ON c.unit_id = u.unit_id
+            WHERE 1=1""" + extra + """
             ORDER BY u.name, c.hostname
-        """).fetchall()
+        """, extra_params).fetchall()
     
     class PDF(FPDF):
         def header(self):
@@ -1606,21 +2051,32 @@ def api_metrics_history():
     agent_id = request.args.get("agent_id")
     days = int(request.args.get("days", 7))
     tid = get_current_tenant()
+    role, unit_ids = current_user_access()
     
     from datetime import timedelta
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     
     with get_db() as conn:
         if agent_id:
+            if not computer_in_scope(agent_id):
+                return jsonify([])
             rows = conn.execute(
                 "SELECT * FROM metrics_history WHERE agent_id = ? AND recorded_at > ? ORDER BY recorded_at ASC",
                 (agent_id, cutoff)
             ).fetchall()
-        else:
+        elif role == "master":
             rows = conn.execute(
                 "SELECT mh.*, c.hostname FROM metrics_history mh LEFT JOIN computers c ON mh.agent_id = c.agent_id WHERE mh.recorded_at > ? AND mh.tenant_id = ? ORDER BY mh.recorded_at ASC",
                 (cutoff, tid)
             ).fetchall()
+        elif unit_ids:
+            ph = ",".join("?" * len(unit_ids))
+            rows = conn.execute(
+                "SELECT mh.*, c.hostname FROM metrics_history mh LEFT JOIN computers c ON mh.agent_id = c.agent_id WHERE mh.recorded_at > ? AND mh.tenant_id = ? AND c.unit_id IN (" + ph + ") ORDER BY mh.recorded_at ASC",
+                [cutoff, tid] + unit_ids
+            ).fetchall()
+        else:
+            rows = []
     return jsonify([dict(r) for r in rows])
 
 
@@ -1628,10 +2084,20 @@ def api_metrics_history():
 @require_login
 def api_metrics_summary():
     tid = get_current_tenant()
+    role, unit_ids = current_user_access()
+    # join para filtrar por unidade
+    unit_join = ""
+    if role != "master":
+        if not unit_ids:
+            return jsonify({"current": {}, "this_week": {}, "last_week": {}})
+        unit_join = " JOIN computers c ON mh.agent_id = c.agent_id AND c.unit_id IN (" + ",".join("?" * len(unit_ids)) + ")"
     with get_db() as conn:
+        params_base = [tid]
+        if role != "master":
+            params_base = params_base + unit_ids
         current = conn.execute(
-            "SELECT AVG(cpu_percent) as cpu_avg, AVG(ram_percent) as ram_avg, SUM(disk_used_gb) as disk_used, SUM(disk_total_gb) as disk_total FROM metrics_history WHERE tenant_id = ? AND recorded_at > datetime('now', '-1 hour')",
-            (tid,)
+            "SELECT AVG(mh.cpu_percent) as cpu_avg, AVG(mh.ram_percent) as ram_avg, SUM(mh.disk_used_gb) as disk_used, SUM(mh.disk_total_gb) as disk_total FROM metrics_history mh" + unit_join + " WHERE mh.tenant_id = ? AND mh.recorded_at > datetime('now', '-1 hour')",
+            params_base
         ).fetchone()
         
         from datetime import timedelta
@@ -1640,13 +2106,13 @@ def api_metrics_summary():
         two_weeks_ago = (now - timedelta(days=14)).isoformat()
         
         this_week = conn.execute(
-            "SELECT AVG(cpu_percent) as cpu, AVG(ram_percent) as ram FROM metrics_history WHERE tenant_id = ? AND recorded_at > ?",
-            (tid, week_ago)
+            "SELECT AVG(mh.cpu_percent) as cpu, AVG(mh.ram_percent) as ram FROM metrics_history mh" + unit_join + " WHERE mh.tenant_id = ? AND mh.recorded_at > ?",
+            params_base + [week_ago]
         ).fetchone()
         
         last_week = conn.execute(
-            "SELECT AVG(cpu_percent) as cpu, AVG(ram_percent) as ram FROM metrics_history WHERE tenant_id = ? AND recorded_at > ? AND recorded_at <= ?",
-            (tid, two_weeks_ago, week_ago)
+            "SELECT AVG(mh.cpu_percent) as cpu, AVG(mh.ram_percent) as ram FROM metrics_history mh" + unit_join + " WHERE mh.tenant_id = ? AND mh.recorded_at > ? AND mh.recorded_at <= ?",
+            params_base + [two_weeks_ago, week_ago]
         ).fetchone()
         
     return jsonify({
@@ -1663,10 +2129,11 @@ def api_metrics_summary():
 @require_login
 def api_maintenance_list():
     tid = get_current_tenant()
+    extra, extra_params = unit_scope_clause("c")
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT m.*, c.hostname, c.tag_evo FROM maintenance_alerts m LEFT JOIN computers c ON m.agent_id = c.agent_id WHERE m.tenant_id = ? ORDER BY m.created_at DESC LIMIT 50",
-            (tid,)
+            "SELECT m.*, c.hostname, c.tag_evo FROM maintenance_alerts m LEFT JOIN computers c ON m.agent_id = c.agent_id WHERE m.tenant_id = ?" + extra + " ORDER BY m.created_at DESC LIMIT 50",
+            [tid] + extra_params
         ).fetchall()
     return jsonify([dict(r) for r in rows])
 
@@ -1691,45 +2158,19 @@ def api_maintenance_resolve(alert_id):
 def api_tickets_list():
     tenant = get_user_tenant()
     status = request.args.get("status")
-    user_id = session.get("user_id")
+    role, unit_ids = current_user_access()
+    extra, extra_params = unit_scope_clause("t")
     with get_db() as conn:
-        # Check if user is admin
-        is_admin = 0
-        if user_id:
-            admin_row = conn.execute("SELECT is_admin FROM users WHERE user_id = ?", (user_id,)).fetchone()
-            if admin_row:
-                is_admin = admin_row["is_admin"]
-        
-        if is_admin:
-            # Admin sees all tickets in their tenant
-            if status:
-                rows = conn.execute(
-                    "SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ? AND t.status = ? ORDER BY t.created_at DESC",
-                    (tenant, status)
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ? ORDER BY t.created_at DESC",
-                    (tenant,)
-                ).fetchall()
+        if status:
+            rows = conn.execute(
+                "SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ? AND t.status = ?" + extra + " ORDER BY t.created_at DESC",
+                [tenant, status] + extra_params
+            ).fetchall()
         else:
-            # Non-admin sees only tickets for their linked units
-            unit_ids = [r["unit_id"] for r in conn.execute("SELECT unit_id FROM user_units WHERE user_id = ?", (user_id,)).fetchall()]
-            if not unit_ids:
-                # No units linked = no tickets visible
-                rows = []
-            else:
-                placeholders = ",".join("?" * len(unit_ids))
-                if status:
-                    rows = conn.execute(
-                        f"SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ? AND t.status = ? AND t.unit_id IN ({placeholders}) ORDER BY t.created_at DESC",
-                        [tenant, status] + unit_ids
-                    ).fetchall()
-                else:
-                    rows = conn.execute(
-                        f"SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ? AND t.unit_id IN ({placeholders}) ORDER BY t.created_at DESC",
-                        [tenant] + unit_ids
-                    ).fetchall()
+            rows = conn.execute(
+                "SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ?" + extra + " ORDER BY t.created_at DESC",
+                [tenant] + extra_params
+            ).fetchall()
     return jsonify([dict(r) for r in rows])
 
 
@@ -1749,10 +2190,19 @@ def api_tickets_create():
     tid = get_current_tenant()
     user = session.get("user", "system")
     
+    role, my_unit_ids = current_user_access()
+    unit_id = None
     with get_db() as conn:
+        # define unidade do chamado a partir do computador ou da unidade do usuário
+        if agent_id:
+            c_row = conn.execute("SELECT unit_id FROM computers WHERE agent_id = ?", (agent_id,)).fetchone()
+            if c_row and c_row["unit_id"]:
+                unit_id = c_row["unit_id"]
+        if unit_id is None and role != "master":
+            unit_id = my_unit_ids[0] if my_unit_ids else None
         conn.execute(
-            "INSERT INTO tickets (tenant_id, agent_id, title, description, status, priority, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?)",
-            (tid, agent_id, title, description, priority, user, now, now)
+            "INSERT INTO tickets (tenant_id, agent_id, title, description, status, priority, created_by, unit_id, created_at, updated_at) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)",
+            (tid, agent_id, title, description, priority, user, unit_id, now, now)
         )
         conn.commit()
     return jsonify({"ok": True})
@@ -1762,6 +2212,8 @@ def api_tickets_create():
 @require_login
 def api_tickets_update(ticket_id):
     data = request.get_json(silent=True) or {}
+    if not ticket_in_scope(ticket_id):
+        return jsonify({"error": "sem acesso a este chamado"}), 403
     now = utc_now_iso()
     
     with get_db() as conn:
@@ -1795,6 +2247,8 @@ def api_tickets_update(ticket_id):
 @app.route("/api/tickets/<int:ticket_id>", methods=["DELETE"])
 @require_login
 def api_tickets_delete(ticket_id):
+    if not ticket_in_scope(ticket_id):
+        return jsonify({"error": "sem acesso a este chamado"}), 403
     with get_db() as conn:
         conn.execute("DELETE FROM tickets WHERE ticket_id = ?", (ticket_id,))
         conn.commit()
@@ -1809,6 +2263,8 @@ def api_tickets_delete(ticket_id):
 @require_login
 def api_ticket_assign(ticket_id):
     data = request.get_json(silent=True) or {}
+    if not ticket_in_scope(ticket_id):
+        return jsonify({"error": "sem acesso a este chamado"}), 403
     assigned_to = (data.get("assigned_to") or "").strip()
     now = utc_now_iso()
     user = session.get("user", "system")
@@ -1826,6 +2282,8 @@ def api_ticket_assign(ticket_id):
 @require_login
 def api_ticket_start(ticket_id):
     data = request.get_json(silent=True) or {}
+    if not ticket_in_scope(ticket_id):
+        return jsonify({"error": "sem acesso a este chamado"}), 403
     notes = (data.get('notes') or '').strip()
     now = utc_now_iso()
     user = session.get("user", "system")
@@ -1846,6 +2304,8 @@ def api_ticket_start(ticket_id):
 @require_login
 def api_ticket_resolve(ticket_id):
     data = request.get_json(silent=True) or {}
+    if not ticket_in_scope(ticket_id):
+        return jsonify({"error": "sem acesso a este chamado"}), 403
     resolution_notes = (data.get("resolution_notes") or "").strip()
     now = utc_now_iso()
     user = session.get("user", "system")
@@ -1863,6 +2323,8 @@ def api_ticket_resolve(ticket_id):
 @require_login
 def api_ticket_close(ticket_id):
     data = request.get_json(silent=True) or {}
+    if not ticket_in_scope(ticket_id):
+        return jsonify({"error": "sem acesso a este chamado"}), 403
     resolution_notes = (data.get("resolution_notes") or "").strip()
     now = utc_now_iso()
     user = session.get("user", "system")
@@ -1879,6 +2341,8 @@ def api_ticket_close(ticket_id):
 @require_login
 def api_ticket_reopen(ticket_id):
     now = utc_now_iso()
+    if not ticket_in_scope(ticket_id):
+        return jsonify({"error": "sem acesso a este chamado"}), 403
     user = session.get("user", "system")
     with get_db() as conn:
         conn.execute("UPDATE tickets SET status = 'open', closed_at = NULL, resolved_at = NULL, updated_at = ? WHERE ticket_id = ?", (now, ticket_id))
@@ -1890,6 +2354,8 @@ def api_ticket_reopen(ticket_id):
 @app.route("/api/tickets/<int:ticket_id>/notes", methods=["GET"])
 @require_login
 def api_ticket_notes_list(ticket_id):
+    if not ticket_in_scope(ticket_id):
+        return jsonify({"error": "sem acesso a este chamado"}), 403
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM ticket_notes WHERE ticket_id = ? ORDER BY created_at DESC", (ticket_id,)).fetchall()
     return jsonify([dict(r) for r in rows])
@@ -1899,6 +2365,8 @@ def api_ticket_notes_list(ticket_id):
 @require_login
 def api_ticket_notes_add(ticket_id):
     data = request.get_json(silent=True) or {}
+    if not ticket_in_scope(ticket_id):
+        return jsonify({"error": "sem acesso a este chamado"}), 403
     content_text = (data.get("content") or "").strip()
     is_internal = data.get("is_internal", 0)
     if not content_text:
@@ -1916,6 +2384,8 @@ def api_ticket_notes_add(ticket_id):
 @app.route("/api/tickets/<int:ticket_id>/history", methods=["GET"])
 @require_login
 def api_ticket_history(ticket_id):
+    if not ticket_in_scope(ticket_id):
+        return jsonify({"error": "sem acesso a este chamado"}), 403
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM ticket_history WHERE ticket_id = ? ORDER BY created_at DESC", (ticket_id,)).fetchall()
     return jsonify([dict(r) for r in rows])
@@ -1925,10 +2395,11 @@ def api_ticket_history(ticket_id):
 @require_login
 def api_tickets_stats():
     tid = get_current_tenant()
+    extra, extra_params = unit_scope_clause("t")
     with get_db() as conn:
         stats = {}
         for st in ['open', 'in_progress', 'on_hold', 'resolved', 'closed']:
-            row = conn.execute("SELECT COUNT(*) as cnt FROM tickets WHERE tenant_id = ? AND status = ?", (tid, st)).fetchone()
+            row = conn.execute("SELECT COUNT(*) as cnt FROM tickets t WHERE t.tenant_id = ? AND t.status = ?" + extra, [tid, st] + extra_params).fetchone()
             stats[st] = row["cnt"]
         stats["total"] = sum(stats.values())
     return jsonify(stats)
@@ -1940,8 +2411,9 @@ def api_tickets_report():
     date_from = request.args.get("from", "")
     date_to = request.args.get("to", "")
     status = request.args.get("status", "")
-    query = "SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ?"
-    params = [tid]
+    extra, extra_params = unit_scope_clause("t")
+    query = "SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ?" + extra
+    params = [tid] + extra_params
     if status:
         query += " AND t.status = ?"
         params.append(status)
@@ -1966,8 +2438,9 @@ def api_tickets_report_pdf():
     date_from = request.args.get("from", "")
     date_to = request.args.get("to", "")
     status = request.args.get("status", "")
-    query = "SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ?"
-    params = [tid]
+    extra, extra_params = unit_scope_clause("t")
+    query = "SELECT t.*, c.hostname FROM tickets t LEFT JOIN computers c ON t.agent_id = c.agent_id WHERE t.tenant_id = ?" + extra
+    params = [tid] + extra_params
     if status:
         query += " AND t.status = ?"
         params.append(status)
@@ -1984,7 +2457,7 @@ def api_tickets_report_pdf():
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", "B", 20)
-    pdf.cell(0, 15, "InvPro - Relatorio de Chamados", 0, 1, "C")
+    pdf.cell(0, 15, "AtivoFix - Relatorio de Chamados", 0, 1, "C")
     pdf.set_font("Helvetica", "", 12)
     tname = tenant["name"] if tenant else "N/A"
     pdf.cell(0, 8, "Empresa: " + tname, 0, 1)
@@ -2055,7 +2528,7 @@ SMTP_HOST = os.environ.get("SMTP_HOST", "")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
 SMTP_USER = os.environ.get("SMTP_USER", "")
 SMTP_PASS = os.environ.get("SMTP_PASS", "")
-SMTP_FROM = os.environ.get("SMTP_FROM", "suporte@invpro.com")
+SMTP_FROM = os.environ.get("SMTP_FROM", "suporte@ativofix.com")
 EMAIL_ENABLED = bool(SMTP_HOST and SMTP_USER)
 
 def send_email(to, subject, body):
@@ -2078,10 +2551,10 @@ def send_email(to, subject, body):
         return False
 
 def notify_ticket_created(ticket_id, title, created_by, email=None):
-    subject = f"[InvPro] Chamado #{ticket_id} criado - {title}"
+    subject = f"[AtivoFix] Chamado #{ticket_id} criado - {title}"
     body = f"""<div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto">
     <div style="background:linear-gradient(135deg,#38bdf8,#818cf8);padding:20px;border-radius:12px 12px 0 0;text-align:center">
-        <h1 style="color:white;margin:0">InvPro</h1>
+        <h1 style="color:white;margin:0">AtivoFix</h1>
         <p style="color:rgba(255,255,255,.8);margin:4px 0 0">Chamado Criado</p>
     </div>
     <div style="background:#1e293b;padding:24px;border-radius:0 0 12px 12px;color:#e2e8f0">
@@ -2091,7 +2564,7 @@ def notify_ticket_created(ticket_id, title, created_by, email=None):
             <p style="margin:0"><strong>Status:</strong> Aberto</p>
             <p style="margin:4px 0 0"><strong>Prioridade:</strong> Media</p>
         </div>
-        <p style="font-size:13px;color:#94a3b8">Acompanhe seu chamado em: <a href="#" style="color:#38bdf8">InvPro - Acompanhar Chamado</a></p>
+        <p style="font-size:13px;color:#94a3b8">Acompanhe seu chamado em: <a href="#" style="color:#38bdf8">AtivoFix - Acompanhar Chamado</a></p>
     </div>
 </div>"""
     if email:
@@ -2111,10 +2584,10 @@ def _notify_status(ticket_id, old_status, new_status):
 
 def notify_status_changed(ticket_id, title, old_status, new_status, email=None):
     SL = {"open": "Aberto", "in_progress": "Em Andamento", "resolved": "Resolvido", "closed": "Fechado"}
-    subject = f"[InvPro] Chamado #{ticket_id} - Status alterado para {SL.get(new_status, new_status)}"
+    subject = f"[AtivoFix] Chamado #{ticket_id} - Status alterado para {SL.get(new_status, new_status)}"
     body = f"""<div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto">
     <div style="background:linear-gradient(135deg,#38bdf8,#818cf8);padding:20px;border-radius:12px 12px 0 0;text-align:center">
-        <h1 style="color:white;margin:0">InvPro</h1>
+        <h1 style="color:white;margin:0">AtivoFix</h1>
         <p style="color:rgba(255,255,255,.8);margin:4px 0 0">Status Atualizado</p>
     </div>
     <div style="background:#1e293b;padding:24px;border-radius:0 0 12px 12px;color:#e2e8f0">
@@ -2176,44 +2649,46 @@ def suporte_dashboard():
 @app.route("/api/tickets/dashboard")
 @require_login
 def api_tickets_dashboard():
+    tid = get_current_tenant()
+    extra, extra_params = unit_scope_clause("t")
     with get_db() as conn:
         # Tickets by status
         status_counts = {}
-        for row in conn.execute("SELECT status, COUNT(*) as cnt FROM tickets GROUP BY status"):
+        for row in conn.execute("SELECT t.status, COUNT(*) as cnt FROM tickets t WHERE t.tenant_id = ?" + extra + " GROUP BY t.status", [tid] + extra_params):
             status_counts[row["status"]] = row["cnt"]
         
         # Tickets by priority
         priority_counts = {}
-        for row in conn.execute("SELECT priority, COUNT(*) as cnt FROM tickets GROUP BY priority"):
+        for row in conn.execute("SELECT t.priority, COUNT(*) as cnt FROM tickets t WHERE t.tenant_id = ?" + extra + " GROUP BY t.priority", [tid] + extra_params):
             priority_counts[row["priority"]] = row["cnt"]
         
         # Tickets created per day (last 30 days)
         daily_created = []
         for row in conn.execute("""
-            SELECT DATE(created_at) as day, COUNT(*) as cnt 
-            FROM tickets 
-            WHERE created_at >= datetime('now', '-30 days')
-            GROUP BY DATE(created_at) 
+            SELECT DATE(t.created_at) as day, COUNT(*) as cnt 
+            FROM tickets t 
+            WHERE t.tenant_id = ? AND t.created_at >= datetime('now', '-30 days')""" + extra + """
+            GROUP BY DATE(t.created_at) 
             ORDER BY day
-        """):
+        """, [tid] + extra_params):
             daily_created.append({"date": row["day"], "count": row["cnt"]})
         
         # Tickets resolved per day (last 30 days)
         daily_resolved = []
         for row in conn.execute("""
-            SELECT DATE(resolved_at) as day, COUNT(*) as cnt 
-            FROM tickets 
-            WHERE resolved_at IS NOT NULL AND resolved_at >= datetime('now', '-30 days')
-            GROUP BY DATE(resolved_at) 
+            SELECT DATE(t.resolved_at) as day, COUNT(*) as cnt 
+            FROM tickets t 
+            WHERE t.tenant_id = ? AND t.resolved_at IS NOT NULL AND t.resolved_at >= datetime('now', '-30 days')""" + extra + """
+            GROUP BY DATE(t.resolved_at) 
             ORDER BY day
-        """):
+        """, [tid] + extra_params):
             daily_resolved.append({"date": row["day"], "count": row["cnt"]})
         
         # Average resolution time (in hours)
         avg_time = conn.execute("""
-            SELECT AVG((julianday(resolved_at) - julianday(created_at)) * 24) as avg_hours
-            FROM tickets WHERE resolved_at IS NOT NULL
-        """).fetchone()["avg_hours"] or 0
+            SELECT AVG((julianday(t.resolved_at) - julianday(t.created_at)) * 24) as avg_hours
+            FROM tickets t WHERE t.tenant_id = ? AND t.resolved_at IS NOT NULL""" + extra,
+            [tid] + extra_params).fetchone()["avg_hours"] or 0
         
         # Tickets by unit
         unit_counts = []
@@ -2222,19 +2697,20 @@ def api_tickets_dashboard():
             FROM tickets t
             LEFT JOIN computers ON t.agent_id = computers.agent_id
             LEFT JOIN units u ON computers.unit_id = u.unit_id
+            WHERE t.tenant_id = ?""" + extra + """
             GROUP BY u.name
             ORDER BY cnt DESC
             LIMIT 10
-        """):
+        """, [tid] + extra_params):
             unit_counts.append({"unit": row["unit_name"] or "Sem unidade", "count": row["cnt"]})
         
         # Open SLAs by priority
         sla_info = []
         for row in conn.execute("""
-            SELECT ticket_id, title, priority, created_at, status
-            FROM tickets WHERE status IN ('open', 'in_progress')
-            ORDER BY CASE priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END
-        """):
+            SELECT t.ticket_id, t.title, t.priority, t.created_at, t.status
+            FROM tickets t WHERE t.tenant_id = ? AND t.status IN ('open', 'in_progress')""" + extra + """
+            ORDER BY CASE t.priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END
+        """, [tid] + extra_params):
             sla_hours = {"critical": 1, "high": 4, "medium": 8, "low": 24}.get(row["priority"], 24)
             sla_info.append({
                 "ticket_id": row["ticket_id"],
@@ -2246,7 +2722,7 @@ def api_tickets_dashboard():
             })
         
         # Total tickets
-        total = conn.execute("SELECT COUNT(*) as cnt FROM tickets").fetchone()["cnt"]
+        total = conn.execute("SELECT COUNT(*) as cnt FROM tickets t WHERE t.tenant_id = ?" + extra, [tid] + extra_params).fetchone()["cnt"]
         
     return jsonify({
         "status_counts": status_counts,

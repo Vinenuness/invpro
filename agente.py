@@ -400,9 +400,9 @@ def install_as_service():
     import servicemanager
     
     class AgentService(win32serviceutil.ServiceFramework):
-        _svc_name_ = "InvProAgent"
-        _svc_display_name_ = "InvPro Inventory Agent"
-        _svc_description_ = "Collects system inventory and reports to InvPro server"
+        _svc_name_ = "AtivoFixAgent"
+        _svc_display_name_ = "AtivoFix Inventory Agent"
+        _svc_description_ = "Collects system inventory and reports to AtivoFix server"
         
         def __init__(self, args):
             win32serviceutil.ServiceFramework.__init__(self, args)
@@ -538,7 +538,7 @@ def open_file_or_folder(path: str):
 # AUTO-START (Windows Startup)
 # =========================
 REGISTRY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"
-AGENT_REG_NAME = "InvProAgent"
+AGENT_REG_NAME = "AtivoFixAgent"
 
 def get_agent_path():
     """Get the full path to this agent script"""

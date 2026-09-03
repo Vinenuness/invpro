@@ -3,7 +3,7 @@
 <head>
 <meta charset=UTF-8 />
 <meta name=viewport content="width=device-width, initial-scale=1.0" />
-<title>Chamados - InvPro</title>
+<title>Chamados - AtivoFix</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 
@@ -15,7 +15,7 @@
 <div class="top-bar">
 <div class="brand">
 <div class="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
-<div><div class="brand-text">InvPro</div><div class="brand-sub">Chamados</div></div>
+<div><div class="brand-text">AtivoFix</div><div class="brand-sub">Chamados</div></div>
 </div>
 <div class="top-right">
 <div class="menu-wrap">
@@ -93,7 +93,8 @@
 <h3>Iniciar Atendimento</h3>
 <div class="form-group"><label>Observacao (opcional)</label><textarea id="startNotes" placeholder="Descreva o que foi feto ou observado ao iniciar..."></textarea></div>
 <div class="modal-actions"><button class="btn-cancel" onclick="closeAll()">Cancelar</button><button class="btn-save resolve" onclick="confirmStart()">Iniciar</button></div>
-</div></div>
+</div></div>
+
 <div class="toast" id="toast"></div>
 <script>
 var curF='',pid=null;
@@ -119,6 +120,9 @@ function dlReport(){var p=new URLSearchParams();var f=document.getElementById('r
 document.addEventListener('click',function(e){var b=e.target.closest('[data-a]');if(!b)return;var a=b.getAttribute('data-a'),id=b.getAttribute('data-i');if(a==='start')openStartModal(id);else if(a==='resolve')openResolveModal(id);else if(a==='close')openCloseModal(id);else if(a==='reopen')fetch('/api/tickets/'+id+'/reopen',{method:'POST'}).then(function(){loadTickets(curF);showToast('Reaberto!')});else if(a==='detail')openDetail(id);else if(a==='delete'){if(!confirm('Excluir?'))return;fetch('/api/tickets/'+id,{method:'DELETE'}).then(function(){loadTickets(curF);showToast('Excluido!')})}});
 document.addEventListener('click',function(e){var f=e.target.closest('.filter-btn');if(f)loadTickets(f.getAttribute('data-filter'))});
 loadTickets('');loadStats();
+</script>
+<script>
+fetch('/api/me').then(function(r){return r.json()}).then(function(m){if(m.role==='tech'){var sel=document.querySelectorAll('a[href="/usuarios"],a[href="/empresas"],a[href="/estrutura"],a[href="/scripts"]');for(var i=0;i<sel.length;i++){sel[i].style.display='none';}}}).catch(function(){});
 </script>
 </body>
 </html>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Estrutura - InvPro</title>
+<title>Estrutura - AtivoFix</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
@@ -43,5 +43,8 @@ body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;min-heigh
 <div id="toast" class="toast"></div>
 
 <script src="estrutura.js"></script>
+<script>
+fetch('/api/me').then(function(r){return r.json()}).then(function(m){if(m.role==='tech'){var sel=document.querySelectorAll('a[href="/usuarios"],a[href="/empresas"],a[href="/estrutura"],a[href="/scripts"]');for(var i=0;i<sel.length;i++){sel[i].style.display='none';}}}).catch(function(){});
+</script>
 </body>
 </html>

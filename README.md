@@ -1,4 +1,4 @@
-# InvPro - Sistema de Gestão de Inventário de TI
+# AtivoFix - Sistema de Gestão de Inventário de TI
 
 Sistema completo para gerenciamento de inventário de computadores, com suporte multi-tenant para empresas.
 
@@ -28,8 +28,8 @@ Sistema completo para gerenciamento de inventário de computadores, com suporte 
 
 ```bash
 # Clonar repositório
-git clone https://github.com/SEU-USERNAME/invpro.git
-cd invpro
+git clone https://github.com/SEU-USERNAME/ativofix.git
+cd ativofix
 
 # Criar ambiente virtual
 cd templates
@@ -52,7 +52,7 @@ python server.py
 ## Estrutura
 
 ```
-invpro/
+ativofix/
 ├── templates/
 │   ├── server.py          # Servidor Flask principal
 │   ├── index.html         # Dashboard principal
@@ -80,4 +80,4 @@ python agente.py
 
 ## Licença
 
-© 2026 InvPro. Todos os direitos reservados.
+© 2026 AtivoFix. Todos os direitos reservados.
