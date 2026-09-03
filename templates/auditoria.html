@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Auditoria - AtivoFix</title>
+<link rel="icon" href="/static/logo-icon.png" />
+<style>
+body{font-family:Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:20px}
+h1{margin:0;font-size:20px}
+.top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.left{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.small{font-size:12px;color:#94a3b8}
+table{width:100%;border-collapse:collapse;background:#1e293b;border-radius:12px;overflow:hidden;font-size:13px}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid #334155;vertical-align:top}
+th{background:#0b1220;color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+tr:hover{background:#22324a}
+.method{display:inline-block;border-radius:6px;padding:1px 7px;font-weight:bold;font-size:11px;background:#1e3a8a;color:#93c5fd}
+.method.delete,.method.post{background:#450a0a;color:#fca5a5}
+a{color:#e2e8f0;text-decoration:none}
+.badge{display:inline-block;background:#0b1220;border:1px solid #334155;border-radius:999px;padding:1px 8px;font-size:11px;margin:1px}
+.empty{padding:24px;text-align:center;color:#94a3b8}
+.err{color:#fca5a5}
+</style></head><body>
+<div class=top>
+  <div class=left><a href=/>Voltar</a><h1>Auditoria</h1><div class=small id=count></div></div>
+  <div class=small><button class=refresh onclick=load() style="background:#2563eb;color:#fff;border:0;border-radius:8px;padding:8px 14px;cursor:pointer">Atualizar</button></div>
+</div>
+<div id=wrap><table><thead><tr><th>Quando</th><th>Quem</th><th>Acao</th><th>Detalhe</th></tr></thead><tbody id=rows></tbody></table></div>
+<script>
+function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function fmt(t){if(!t)return"-";try{return new Date(t).toLocaleString("pt-BR")}catch(e){return t}}
+async function load(){
+  var wrap=document.getElementById("rows");
+  wrap.innerHTML="<tr><td colspan=4 class=empty>Carregando...</td></tr>";
+  try{
+    var r=await fetch("/api/audit?limit=200");
+    if(r.status===403){document.getElementById("count").innerText="";wrap.innerHTML="<tr><td colspan=4 class='empty err'>Sem permissao para ver a auditoria.</td></tr>";return;}
+    var list=await r.json();
+    document.getElementById("count").innerText=list.length+" eventos";
+    if(!list.length){wrap.innerHTML="<tr><td colspan=4 class=empty>Nenhum evento registrado ainda.</td></tr>";return;}
+    wrap.innerHTML=list.map(function(x){
+      var m=(x.action||"").split(" ")[0]||"";
+      var path=(x.action||"").split(" ").slice(1).join(" ");
+      var methodCls=(m==="DELETE"||m==="POST")?"method delete":"method";
+      var who=x.username||"-"; if(x.user_id)who+=" <span class='badge'>#" + x.user_id + "</span>";
+      return "<tr><td style=white-space:nowrap>"+fmt(x.created_at)+"</td><td style=white-space:nowrap>"+esc(who)+"</td><td><span class='"+methodCls+"'>"+esc(m)+"</span> <span style=color:#7dd3fc>"+esc(path)+"</span></td><td style=word-break:break-word>"+esc(x.detail||"")+"</td></tr>";
+    }).join("");
+  }catch(e){wrap.innerHTML="<tr><td colspan=4 class='empty err'>Erro ao carregar: "+esc(e.message)+"</td></tr>";}
+}
+load();
+</script></body></html>

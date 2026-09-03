@@ -1,0 +1,18 @@
+# systemd - AtivoFix
+# Copie para: /etc/systemd/system/ativofix.service
+[Unit]
+Description=AtivoFix - Sistema de Gestao de TI
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/ativofix/templates
+EnvironmentFile=/opt/ativofix/templates/.env
+ExecStart=/opt/ativofix/templates/.venv/bin/gunicorn --workers 2 --bind 127.0.0.1:8000 --timeout 120 server:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

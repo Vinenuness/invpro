@@ -39,3 +39,6 @@ check.js
 decode.py
 templates/db.sqlite3-shm
 templates/db.sqlite3-wal
+
+# Secret key local
+.secret_key

@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>Detalhes - AtivoFix</title>
+<link rel="icon" href="/static/logo-icon.png" />
   <style>
     body{font-family:Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:20px}
     a{color:#38bdf8;text-decoration:none}
@@ -38,6 +39,7 @@
 
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
         <button class="btn" onclick="openScriptModal()">Executar Script (.bat)</button>
+        <a class="btn" href="/etiqueta/{{ pc.get('_agent_id','') }}">Etiqueta QR</a>
 
         <form method="post" action="/pc/{{ pc.get('_agent_id','') }}/delete"
               onsubmit="return confirm('Tem certeza que deseja excluir este computador?\n\nObs: Se o agente ainda estiver rodando nesse PC, ele vai reaparecer no próximo envio.');">
@@ -184,6 +186,12 @@
       {% endif %}
     </div>
 
+    <!-- HISTORICO DE ALTERACOES -->
+    <h3>Histórico de alterações</h3>
+    <div class="card" id="changesBox">
+      <div class="muted">Carregando...</div>
+    </div>
+
     <!-- DEBUG opcional -->
     <h3>Debug (JSON completo)</h3>
     <pre>{{ pc | tojson(indent=2) }}</pre>
@@ -266,6 +274,28 @@
       const data = await res.json();
       document.getElementById("jobsOut").textContent = JSON.stringify(data, null, 2);
     }
+
+    async function loadChanges(){
+      try{
+        const res = await fetch("/api/computers/{{ pc.get('_agent_id','') }}/changes");
+        const data = await res.json();
+        const box = document.getElementById("changesBox");
+        if(!data.length){
+          box.innerHTML = '<div class="muted">Sem alterações registradas até agora.</div>';
+          return;
+        }
+        let h = '';
+        data.forEach(c => {
+          const d = new Date(c.created_at);
+          const dt = isNaN(d.getTime()) ? '' : d.toLocaleString('pt-BR');
+          h += '<div style="padding:6px 0;border-bottom:1px solid #223047"><b>' + c.summary + '</b>'; 
+          if(c.detail) h += '<br><span class="muted">' + c.detail + '</span>';
+          h += '<br><span style="color:#64748b;font-size:11px">' + dt + '</span></div>';
+        });
+        box.innerHTML = h;
+      }catch(e){ document.getElementById("changesBox").innerHTML = '<div class="muted">Erro ao carregar histórico.</div>'; }
+    }
+    loadChanges();
   </script>
 </body>
 </html>

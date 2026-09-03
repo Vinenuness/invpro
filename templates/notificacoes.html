@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notificações - AtivoFix</title>
+<link rel="icon" href="/static/logo-icon.png" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Inter,-apple-system,sans-serif;background:#0a0e1a;color:#e2e8f0;min-height:100vh}
+.top-bar{background:rgba(15,23,42,.95);border-bottom:1px solid rgba(51,65,85,.3);padding:14px 24px;display:flex;gap:16px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-icon{width:36px;height:36px;border-radius:10px;overflow:hidden;background:#fff}
+.brand-icon img{width:100%;height:100%;object-fit:cover}
+.brand-text{font-size:20px;font-weight:800;background:linear-gradient(135deg,#38bdf8,#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.brand-sub{font-size:11px;color:#64748b;font-weight:500}
+.menu-wrap{position:relative}
+.menu-btn{background:linear-gradient(135deg,#38bdf8,#818cf8);border:none;color:#fff;padding:10px 18px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit}
+.menu-dropdown{display:none;position:absolute;right:0;top:100%;margin-top:8px;background:rgba(15,23,42,.98);border:1px solid rgba(51,65,85,.4);border-radius:14px;padding:6px 0;min-width:200px;z-index:50;box-shadow:0 20px 40px rgba(0,0,0,.5)}
+.menu-dropdown.show{display:block}
+.menu-dropdown a{display:flex;align-items:center;gap:10px;padding:11px 18px;color:#e2e8f0;text-decoration:none;font-size:13px}
+.menu-dropdown a:hover{background:rgba(56,189,248,.1);color:#38bdf8}
+.menu-dropdown .menu-label{font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:1px;padding:10px 18px 4px;font-weight:600}
+.menu-dropdown hr{border:none;border-top:1px solid rgba(51,65,85,.3);margin:4px 0}
+.content{max-width:860px;margin:0 auto;padding:24px}
+.page-title{font-size:22px;font-weight:700;color:#f8fafc;display:flex;align-items:center;gap:10px}
+.page-desc{font-size:13px;color:#64748b;margin:4px 0 20px}
+.notif-card{background:rgba(30,41,59,.5);border:1px solid rgba(51,65,85,.3);border-radius:14px;padding:16px 18px;margin-bottom:10px;display:flex;gap:14px;align-items:flex-start;transition:all .2s}
+.notif-card:hover{border-color:rgba(56,189,248,.3)}
+.notif-card.unread{border-left:3px solid #38bdf8}
+.notif-dot{width:8px;height:8px;border-radius:50%;background:#38bdf8;margin-top:6px;flex-shrink:0}
+.notif-title{font-size:14px;font-weight:700;color:#f1f5f9}
+.notif-msg{font-size:13px;color:#94a3b8;margin-top:3px;line-height:1.45}
+.notif-time{font-size:11px;color:#64748b;margin-top:6px}
+.btn{padding:8px 16px;border-radius:8px;border:1px solid rgba(51,65,85,.4);background:rgba(15,23,42,.6);color:#e2e8f0;font-size:12px;cursor:pointer;font-family:inherit}
+.btn:hover{background:rgba(56,189,248,.1);color:#38bdf8}
+.empty{text-align:center;padding:60px 20px;color:#64748b}
+</style>
+</head>
+<body>
+<div class="top-bar">
+<div class="brand">
+<div class="brand-icon"><img src="/static/logo-icon.png" alt="AtivoFix"></div>
+<div><div class="brand-text">AtivoFix</div><div class="brand-sub">Notificações</div></div>
+</div>
+<div class="menu-wrap">
+<button class="menu-btn" onclick="document.getElementById('menuDrop').classList.toggle('show')">☰ Menu</button>
+<div class="menu-dropdown" id="menuDrop">
+<div class="menu-label">NAVEGAÇÃO</div>
+<a href="/">Computadores</a>
+<a href="/chamados">Chamados</a>
+<a href="/dashboard">Dashboard</a>
+<a href="/scripts">Scripts</a>
+<a href="/unidades">Unidades</a>
+<a href="/ativos">Ativos</a>
+<a href="/base-conhecimento">Base de Conhecimento</a>
+<hr>
+<a href="/logout" style="color:#f87171">Sair</a>
+</div>
+</div>
+</div>
+<div class="content">
+<div class="page-title">🔔 Notificações</div>
+<div class="page-desc" style="display:flex;justify-content:space-between;align-items:center">
+<span>Acompanhe os eventos do sistema (chamados, alertas e mais)</span>
+<button class="btn" onclick="markAll()">Marcar todas como lidas</button>
+</div>
+<div id="list"></div>
+</div>
+<script>
+function fmtD(s){if(!s)return'';try{return new Date(s).toLocaleDateString('pt-BR')+' '+new Date(s).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}catch(e){return s}}
+async function load(){
+  const res=await fetch('/api/notifications?limit=80');
+  const list=await res.json();
+  const el=document.getElementById('list');
+  if(!list.length){el.innerHTML='<div class="empty">Nenhuma notificação por aqui 🎉</div>';return}
+  el.innerHTML=list.map(n=>
+    '<div class="notif-card '+(n.is_read?'':'unread')+'" data-id="'+n.notif_id+'">'+
+    '<div class="notif-dot"></div><div style="flex:1">'+
+    '<div class="notif-title">'+n.title+'</div>'+
+    (n.message?'<div class="notif-msg">'+n.message+'</div>':'')+
+    '<div class="notif-time">'+fmtD(n.created_at)+(n.is_read?'':' · não lida')+'</div>'+
+    '</div></div>').join('');
+}
+async function markAll(){
+  await fetch('/api/notifications/read',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+  load();
+}
+document.addEventListener('click',function(e){var m=document.getElementById('menuDrop');if(m&&!e.target.closest('.menu-wrap'))m.classList.remove('show')});
+load();
+</script>
+</body>
+</html>

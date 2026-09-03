@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Avaliar Atendimento - AtivoFix</title>
+<link rel="icon" href="/static/logo-icon.png" />
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,sans-serif;background:linear-gradient(135deg,#0a0e1a,#111827);color:#e2e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.box{width:100%;max-width:520px;background:rgba(15,23,42,.9);border:1px solid rgba(51,65,85,.5);border-radius:20px;padding:32px;box-shadow:0 25px 50px rgba(0,0,0,.5)}
+.logo{text-align:center;margin-bottom:24px}
+.logo img{max-width:220px;border-radius:12px}
+h2{text-align:center;margin-bottom:6px}
+p.sub{text-align:center;color:#64748b;font-size:13px;margin-bottom:24px}
+.form-group{margin-bottom:16px}
+label{display:block;font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+input,select,textarea{width:100%;padding:12px 14px;border-radius:10px;border:1px solid rgba(51,65,85,.5);background:rgba(15,23,42,.6);color:#e2e8f0;font-size:14px;font-family:inherit;outline:none}
+textarea{min-height:90px;resize:vertical}
+.stars{display:flex;gap:8px;justify-content:center;font-size:34px;cursor:pointer}
+.stars span{color:#334155;transition:color .15s}
+.stars span.on{color:#facc15}
+.stars span:hover{color:#facc15}
+.btn{width:100%;padding:14px;border:none;border-radius:12px;background:linear-gradient(135deg,#38bdf8,#818cf8);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px}
+.msg{margin-top:14px;text-align:center;font-size:14px}
+.ok{color:#22c55e}
+.err{color:#f87171}
+</style>
+</head>
+<body>
+<div class="box">
+<div class="logo"><img src="/static/logo.png" alt="AtivoFix"></div>
+<h2>Avalie o atendimento</h2>
+<p class="sub">Sua opinião nos ajuda a melhorar o suporte de TI</p>
+<div class="form-group"><label>Número do chamado</label><input id="ticketId" type="number" placeholder="Ex: 12"></div>
+<div class="form-group"><label>Seu e-mail cadastrado</label><input id="email" type="email" placeholder="voce@empresa.com"></div>
+<div class="form-group"><label>Sua nota</label><div class="stars" id="stars">
+<span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
+</div></div>
+<div class="form-group"><label>Comentário (opcional)</label><textarea id="comment" placeholder="Conte como foi sua experiência..."></textarea></div>
+<button class="btn" onclick="send()">Enviar Avaliação</button>
+<div class="msg" id="msg"></div>
+</div>
+<script>
+let rating=0;
+document.querySelectorAll('#stars span').forEach(function(s){
+  s.onclick=function(){
+    rating=parseInt(s.getAttribute('data-v'),10);
+    document.querySelectorAll('#stars span').forEach(function(x){
+      x.classList.toggle('on',parseInt(x.getAttribute('data-v'),10)<=rating);
+    });
+  };
+});
+async function send(){
+  const tid=document.getElementById('ticketId').value.trim();
+  const email=document.getElementById('email').value.trim();
+  const comment=document.getElementById('comment').value.trim();
+  const msg=document.getElementById('msg');
+  msg.className='msg';msg.textContent='';
+  if(!tid||!email){msg.classList.add('err');msg.textContent='Informe o número do chamado e o e-mail';return}
+  if(!rating){msg.classList.add('err');msg.textContent='Selecione uma nota';return}
+  try{
+    const r=await fetch('/api/tickets/rate',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ticket_id:parseInt(tid,10),email:email,rating:rating,comment:comment})});
+    const d=await r.json();
+    if(d.ok){msg.classList.add('ok');msg.textContent='Obrigado! Sua avaliação foi registrada. 🙏'}else{msg.classList.add('err');msg.textContent=d.error||'Erro ao enviar'}
+  }catch(e){msg.classList.add('err');msg.textContent='Erro de conexão'}
+}
+</script>
+</body>
+</html>

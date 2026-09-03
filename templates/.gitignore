@@ -23,3 +23,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Seguranca (segredos locais)
+.env
+.secret_key

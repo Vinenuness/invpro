@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Etiqueta - {{ pc.get('_tag_evo') or pc.get('hostname','') }}</title>
+<link rel="icon" href="/static/logo-icon.png" />
+<style>
+@page{margin:6mm}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#e2e8f0;padding:20px;display:flex;flex-direction:column;align-items:center}
+.label{background:#fff;width:90mm;min-height:54mm;border-radius:4px;padding:5mm;box-shadow:0 2px 8px rgba(0,0,0,.25);text-align:center;page-break-after:always;display:flex;flex-direction:column;justify-content:space-between;gap:2mm}
+.l-head{display:flex;align-items:center;justify-content:space-between}
+.l-head img{height:8mm}
+.l-head span{font-size:9pt;font-weight:700;color:#0f172a}
+.host{font-size:14pt;font-weight:800;color:#0f172a;letter-spacing:.5px;word-break:break-all}
+.meta{font-size:8pt;color:#334155;line-height:1.4}
+.qr img{width:34mm;height:34mm}
+.actions{display:flex;gap:10px;margin-top:20px}
+.btn{border:1px solid #334155;background:#0f172a;color:#fff;padding:10px 22px;border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit}
+.btn:hover{background:#1e293b}
+@media print{
+  body{background:#fff;padding:0}
+  .actions{display:none}
+  .label{box-shadow:none}
+}
+</style>
+</head>
+<body>
+<div class="label">
+  <div class="l-head">
+    <img src="/static/logo.png" alt="AtivoFix" style="height:7mm">
+    <span>ATIVOFIX</span>
+  </div>
+  <div class="host">{{ pc.get('_tag_evo') or pc.get('hostname','N/A') }}</div>
+  <div class="qr"><img src="/api/qr/{{ pc.get('_agent_id','') }}.png" alt="QR"></div>
+  <div class="meta">
+    {{ pc.get('hostname','N/A') }}
+    {% if pc.get('_unit_name') %}<br>{{ pc.get('_unit_name') }}{% endif %}
+    {% if pc.get('_location_name') %} • {{ pc.get('_location_name') }}{% endif %}
+    {% if pc.get('network') and pc.get('network').get('ip') %}<br>IP: {{ pc.get('network').get('ip') }}{% endif %}
+  </div>
+</div>
+<div class="actions">
+  <button class="btn" onclick="window.print()">🖨️ Imprimir</button>
+  <button class="btn" onclick="history.back()">Voltar</button>
+</div>
+</body>
+</html>

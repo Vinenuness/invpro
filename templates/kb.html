@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Base de Conhecimento - AtivoFix</title>
+<link rel="icon" href="/static/logo-icon.png" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Inter,-apple-system,sans-serif;background:#0a0e1a;color:#e2e8f0;min-height:100vh}
+.topbar{background:rgba(15,23,42,.95);border-bottom:1px solid rgba(51,65,85,.3);padding:14px 24px;display:flex;gap:16px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-icon{width:36px;height:36px;border-radius:10px;overflow:hidden;background:#fff}
+.brand-icon img{width:100%;height:100%;object-fit:cover}
+.brand-text{font-size:20px;font-weight:800;background:linear-gradient(135deg,#38bdf8,#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.brand-sub{font-size:11px;color:#64748b;font-weight:500}
+.menu-wrap{position:relative}
+.menu-btn{background:linear-gradient(135deg,#38bdf8,#818cf8);border:none;color:#fff;padding:10px 18px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit}
+.menu-dropdown{display:none;position:absolute;right:0;top:100%;margin-top:8px;background:rgba(15,23,42,.98);border:1px solid rgba(51,65,85,.4);border-radius:14px;padding:6px 0;min-width:200px;z-index:50;box-shadow:0 20px 40px rgba(0,0,0,.5)}
+.menu-dropdown.show{display:block}
+.menu-dropdown a{display:flex;align-items:center;gap:10px;padding:11px 18px;color:#e2e8f0;text-decoration:none;font-size:13px}
+.menu-dropdown a:hover{background:rgba(56,189,248,.1);color:#38bdf8}
+.menu-dropdown .menu-label{font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:1px;padding:10px 18px 4px;font-weight:600}
+.menu-dropdown hr{border:none;border-top:1px solid rgba(51,65,85,.3);margin:4px 0}
+.wrap{max-width:1000px;margin:0 auto;padding:24px}
+.page-title{font-size:22px;font-weight:700;color:#f8fafc}
+.page-desc{font-size:13px;color:#64748b;margin:4px 0 20px}
+.searchbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+input,select{padding:9px 12px;border-radius:9px;border:1px solid rgba(51,65,85,.4);background:rgba(15,23,42,.6);color:#e2e8f0;font-size:13px;font-family:inherit;outline:none}
+.btn{border:1px solid rgba(51,65,85,.4);background:rgba(15,23,42,.6);color:#cbd5e1;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-family:inherit}
+.btn:hover{background:rgba(56,189,248,.1);color:#38bdf8}
+.btn-primary{background:linear-gradient(135deg,#22c55e,#16a34a);border:none;color:#fff;font-weight:600}
+.btn-danger{border-color:rgba(239,68,68,.3);color:#f87171}
+.art{background:rgba(30,41,59,.5);border:1px solid rgba(51,65,85,.3);border-radius:14px;padding:18px;margin-bottom:12px;cursor:pointer;transition:all .2s}
+.art:hover{border-color:rgba(56,189,248,.4)}
+.art h3{font-size:15px;color:#f1f5f9;margin-bottom:6px}
+.cat{display:inline-block;background:rgba(56,189,248,.12);color:#38bdf8;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 9px;border-radius:6px;margin-bottom:8px}
+.art .excerpt{font-size:13px;color:#94a3b8;line-height:1.5}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.show{display:flex}
+.modal{background:rgba(15,23,42,.98);border:1px solid rgba(51,65,85,.4);border-radius:16px;padding:24px;width:90%;max-width:720px;max-height:88vh;overflow-y:auto}
+.modal h3{font-size:18px;color:#f1f5f9;margin-bottom:16px}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:10px 12px;border-radius:9px;border:1px solid rgba(51,65,85,.4);background:rgba(30,41,59,.5);color:#e2e8f0;font-size:13px;font-family:inherit;outline:none}
+.form-group textarea{min-height:160px;resize:vertical}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.empty{text-align:center;padding:50px 20px;color:#64748b}
+.article-body{margin-top:12px;font-size:14px;line-height:1.7;color:#cbd5e1;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div class="topbar">
+<div class="brand">
+<div class="brand-icon"><img src="/static/logo-icon.png" alt="AtivoFix"></div>
+<div><div class="brand-text">AtivoFix</div><div class="brand-sub">Base de Conhecimento</div></div>
+</div>
+<div class="menu-wrap">
+<button class="menu-btn" onclick="document.getElementById('menuDrop').classList.toggle('show')">☰ Menu</button>
+<div class="menu-dropdown" id="menuDrop">
+<div class="menu-label">NAVEGAÇÃO</div>
+<a href="/">Computadores</a>
+<a href="/chamados">Chamados</a>
+<a href="/unidades">Unidades</a>
+<a href="/ativos">Ativos</a>
+<a href="/base-conhecimento" style="color:#38bdf8">Base de Conhecimento</a>
+<hr>
+<a href="/logout" style="color:#f87171">Sair</a>
+</div>
+</div>
+</div>
+<div class="wrap">
+<div class="page-title">📚 Base de Conhecimento</div>
+<div class="page-desc">Artigos e guias rápidos para resolver problemas de TI do dia a dia</div>
+<div class="searchbar">
+<input id="q" placeholder="Pesquisar artigos..." oninput="load()" style="flex:1;min-width:200px">
+<select id="cat" onchange="load()"><option value="">Todas as categorias</option></select>
+<button class="btn btn-primary" id="btnNew" onclick="openEdit()">+ Novo Artigo</button>
+</div>
+<div id="list"></div>
+</div>
+<div class="modal-overlay" id="readBox"><div class="modal">
+<h3 id="readTitle"></h3>
+<div class="cat" id="readCat"></div>
+<div class="article-body" id="readBody"></div>
+<div class="modal-actions"><button class="btn" onclick="hideRead()">Fechar</button></div>
+</div></div>
+<div class="modal-overlay" id="editBox"><div class="modal">
+<h3 id="editTitle">Novo Artigo</h3>
+<div class="form-group"><label>Categoria</label><input id="fCat" placeholder="Ex: Rede, Impressora, Windows"></div>
+<div class="form-group"><label>Título *</label><input id="fTitle" placeholder="Título do artigo"></div>
+<div class="form-group"><label>Conteúdo *</label><textarea id="fContent" placeholder="Escreva o passo a passo..."></textarea></div>
+<div class="form-group"><label><input type="checkbox" id="fPub" checked> Visível no portal público</label></div>
+<div class="modal-actions">
+<button class="btn" onclick="hideEdit()">Cancelar</button>
+<button class="btn btn-danger" id="btnDel" onclick="delArt()" style="display:none">Excluir</button>
+<button class="btn btn-primary" onclick="saveArt()">Salvar</button>
+</div>
+</div></div>
+<script>
+let arts=[],editing=null,isAdmin=false,logged=false;
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+async function api(url,opts){const r=await fetch(url,opts);return r.json()}
+async function load(){
+  const q=document.getElementById('q').value.trim();
+  const cat=document.getElementById('cat').value;
+  // se logado -> artigos da própria empresa (admin) ; se não -> portal público (default empresa 1 pode trocar por query)
+  let url='/api/kb?';
+  if(logged&&isAdmin){url='/api/kb?';}
+  arts=await api(url);
+  // filtro client side quando usando o endpoint autenticado (retorna todos da empresa)
+  if(q)arts=arts.filter(a=>(a.title+' '+(a.content||'')).toLowerCase().includes(q.toLowerCase()));
+  if(cat)arts=arts.filter(a=>a.category===cat);
+  const list=document.getElementById('list');
+  if(!arts.length){list.innerHTML='<div class="empty">Nenhum artigo encontrado.</div>';return}
+  list.innerHTML=arts.map(a=>'<div class="art" onclick="openRead('+a.article_id+')">'+
+    '<span class="cat">'+esc(a.category||'Geral')+'</span>'+
+    '<h3>'+esc(a.title)+'</h3>'+
+    '<div class="excerpt">'+esc((a.content||'').slice(0,160))+(a.content&&a.content.length>160?'...':'')+'</div>'+
+    '</div>').join('');
+}
+function openRead(id){
+  const a=arts.find(x=>x.article_id===id);if(!a)return;
+  document.getElementById('readTitle').textContent=a.title;
+  document.getElementById('readCat').textContent=a.category||'Geral';
+  document.getElementById('readBody').textContent=a.content;
+  document.getElementById('readBox').classList.add('show');
+}
+function hideRead(){document.getElementById('readBox').classList.remove('show')}
+function openEdit(id){
+  editing=id?arts.find(a=>a.article_id===id):null;
+  document.getElementById('editTitle').textContent=editing?'Editar Artigo':'Novo Artigo';
+  document.getElementById('fCat').value=editing?(editing.category||''):'';
+  document.getElementById('fTitle').value=editing?(editing.title||''):'';
+  document.getElementById('fContent').value=editing?(editing.content||''):'';
+  document.getElementById('fPub').checked=editing?(!!editing.is_public):true;
+  document.getElementById('btnDel').style.display=editing?'inline-block':'none';
+  document.getElementById('editBox').classList.add('show');
+}
+function hideEdit(){document.getElementById('editBox').classList.remove('show')}
+async function saveArt(){
+  const body={category:document.getElementById('fCat').value.trim(),title:document.getElementById('fTitle').value.trim(),
+    content:document.getElementById('fContent').value,is_public:document.getElementById('fPub').checked?1:0};
+  if(!body.title||!body.content){alert('Preencha título e conteúdo');return}
+  const url=editing?'/api/kb/'+editing.article_id:'/api/kb';
+  const r=await api(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok){alert(r.error||'Erro');return}
+  hideEdit();load();
+}
+async function delArt(){if(!editing)return;if(!confirm('Excluir artigo?'))return;await api('/api/kb/'+editing.article_id,{method:'DELETE'});hideEdit();load()}
+async function init(){
+  // tenta /api/me: se 401/redirect -> anonimo (portal)
+  try{
+    const me=await api('/api/me');
+    if(me&&me.user!==undefined&&me.user!==null){
+      logged=true;isAdmin=me.role!=='tech';
+      document.getElementById('btnNew').style.display=isAdmin?'inline-block':'none';
+      if(isAdmin){document.getElementById('q').placeholder='Pesquisar artigos da sua empresa...'}
+    }
+  }catch(e){}
+  // categorias
+  try{
+    const cats=await api('/api/public/kb/categories?tenant_id=1');
+    const s=document.getElementById('cat');
+    cats.forEach(c=>s.innerHTML+='<option value="'+esc(c)+'">'+esc(c)+'</option>');
+  }catch(e){}
+  load();
+}
+document.addEventListener('click',function(e){var m=document.getElementById('menuDrop');if(m&&!e.target.closest('.menu-wrap'))m.classList.remove('show')});
+init();
+</script>
+</body>
+</html>

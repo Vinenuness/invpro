@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AtivoFix - Computadores</title>
+<link rel="icon" href="/static/logo-icon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -118,10 +119,14 @@ a{color:#e2e8f0;text-decoration:none}
 <body>
 <div class="top-bar">
   <div class="brand">
-    <div class="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></div>
+    <div class="brand-icon" style="background:#fff"><img src="/static/logo-icon.png" alt="AtivoFix" style="width:100%;height:100%;object-fit:cover;border-radius:10px" /></div>
     <div><div class="brand-text">AtivoFix</div><div class="brand-sub">Computadores</div></div>
   </div>
   <div class="top-right">
+    <a href="/notificacoes" title="Notificações" style="position:relative;display:inline-flex;text-decoration:none">
+      <button class="menu-btn" style="background:rgba(56,189,248,.15);color:#38bdf8;box-shadow:none;padding:10px 12px">🔔</button>
+      <span id="notifBadge" style="display:none;position:absolute;top:-6px;right:-6px;background:#f87171;color:#fff;font-size:10px;min-width:17px;height:17px;border-radius:9px;align-items:center;justify-content:center;font-weight:700"></span>
+    </a>
     <div class="search-wrap">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
       <input id="q" class="search-input" placeholder="Buscar por TAG, hostname, IP, serial..." oninput="render()" />
@@ -139,6 +144,9 @@ a{color:#e2e8f0;text-decoration:none}
         <a href="/manutencao">Manutencao</a>
         <a href="/scripts">Scripts</a>
         <a href="/unidades">Unidades</a>
+        <a href="/ativos">Ativos</a>
+        <a href="/base-conhecimento">Base de Conhecimento</a>
+        <a href="/notificacoes">Notificacoes</a>
         <a href="/empresas">Empresas</a>
         <a href="/usuarios">Usuarios</a>
         <hr>
@@ -196,7 +204,7 @@ function render(){
     const ip = safe(pc.network?.ip);
     const user = safe(pc.windows_user);
     const unitName = pc.unit_name || 'Sem unidade';
-    return '<div class="card"><div class="row"><div><div class="title">' + (tag ? '<span class="tag-badge">'+tag+'</span> ' : '') + showName + '</div><div class="muted">' + status + ' &bull; IP: ' + (ip || 'N/A') + ' &bull; User: ' + (user || 'N/A') + '</div><div class="small">' + unitName + (pc.location_name ? ' &bull; '+pc.location_name : '') + '</div></div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" onclick="openAlias(&apos;'+aid+'&apos;,&apos;'+host+'&apos;)">Renomear</button><button class="btn" onclick="openLinkUnit(&apos;'+aid+'&apos;,&apos;'+host+'&apos;)">Vincular</button><button class="btn btn-danger" onclick="deletePc(&apos;'+aid+'&apos;)">Excluir</button><a class="btn" href="/pc/'+encodeURIComponent(aid)+'">Detalhes</a></div></div></div>';
+    return '<div class="card"><div class="row"><div><div class="title">' + (tag ? '<span class="tag-badge">'+tag+'</span> ' : '') + showName + '</div><div class="muted">' + status + ' &bull; IP: ' + (ip || 'N/A') + ' &bull; User: ' + (user || 'N/A') + '</div><div class="small">' + unitName + (pc.location_name ? ' &bull; '+pc.location_name : '') + '</div></div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" onclick="openAlias(&apos;'+aid+'&apos;,&apos;'+host+'&apos;)">Renomear</button><button class="btn" onclick="openLinkUnit(&apos;'+aid+'&apos;,&apos;'+host+'&apos;)">Vincular</button><button class="btn btn-danger" onclick="deletePc(&apos;'+aid+'&apos;)">Excluir</button><a class="btn" href="/pc/'+encodeURIComponent(aid)+'">Detalhes</a><a class="btn" href="/etiqueta/'+encodeURIComponent(aid)+'" title="Imprimir etiqueta QR">Etiqueta</a></div></div></div>';
   }).join('');
 }
 function openAlias(aid,host){ editing={agent_id:aid,hostname:host}; document.getElementById('modalSub').textContent='PC: '+host; document.getElementById('aliasInput').value=''; document.getElementById('modal').style.display='flex'; }
@@ -211,6 +219,8 @@ function onUnitChange(preselect){const uid=document.getElementById('unitSelect')
 function hideLinkUnitModal(){document.getElementById('linkUnitModal').style.display='none'}
 async function saveLinkUnit(){const uid=document.getElementById('unitSelect').value;const lid=document.getElementById('locationSelect').value;if(uid){await fetch('/api/computers/'+linkingAgentId+'/unit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unit_id:parseInt(uid)})});}const body2=lid?{location_id:parseInt(lid)}:{};await fetch('/api/computers/'+linkingAgentId+'/location',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body2)});hideLinkUnitModal();await load();}
 document.addEventListener('click',e=>{const m=document.getElementById('menuDrop'),b=document.querySelector('.menu-btn');if(m&&!m.contains(e.target)&&!b.contains(e.target))m.classList.remove('show')});
+// Notifications badge
+async function loadNotifs(){try{const r=await fetch('/api/notifications/unread-count');const d=await r.json();const badge=document.getElementById('notifBadge');if(badge){if(d.count>0){badge.textContent=d.count;badge.style.display='inline'}else{badge.style.display='none'}}}catch(e){}}
 // Load alerts count
 async function loadAlerts(){
   try{
@@ -225,9 +235,9 @@ async function checkOffline(){
   try{await fetch('/api/alerts/check-offline',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({threshold_minutes:60})})}catch(e){}
   loadAlerts();
 }
-setInterval(load,5000);load();loadAlerts();setInterval(checkOffline,300000);checkOffline();</script>
+setInterval(load,5000);load();loadAlerts();loadNotifs();setInterval(checkOffline,300000);checkOffline();setInterval(loadNotifs,30000);</script>
 <script>
-fetch('/api/me').then(function(r){return r.json()}).then(function(m){if(m.role==='tech'){var sel=document.querySelectorAll('a[href="/usuarios"],a[href="/empresas"],a[href="/estrutura"],a[href="/scripts"]');for(var i=0;i<sel.length;i++){sel[i].style.display='none';}}}).catch(function(){});
+fetch('/api/me').then(function(r){return r.json()}).then(function(m){if(m.role==='tech'){var sel=document.querySelectorAll('a[href="/usuarios"],a[href="/empresas"],a[href="/estrutura"]');for(var i=0;i<sel.length;i++){sel[i].style.display='none';}if(!m.can_manage_scripts){var sh=document.querySelector('a[href="/scripts"]');if(sh)sh.style.display='none';}}}).catch(function(){});
 </script>
 </body>
 </html>

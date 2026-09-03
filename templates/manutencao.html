@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Manutencao - AtivoFix</title>
+<link rel="icon" href="/static/logo-icon.png" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -85,7 +86,7 @@ async function resolve(id){
 load();
 </script>
 <script>
-fetch('/api/me').then(function(r){return r.json()}).then(function(m){if(m.role==='tech'){var sel=document.querySelectorAll('a[href="/usuarios"],a[href="/empresas"],a[href="/estrutura"],a[href="/scripts"]');for(var i=0;i<sel.length;i++){sel[i].style.display='none';}}}).catch(function(){});
+fetch('/api/me').then(function(r){return r.json()}).then(function(m){if(m.role==='tech'){var sel=document.querySelectorAll('a[href="/usuarios"],a[href="/empresas"],a[href="/estrutura"]');for(var i=0;i<sel.length;i++){sel[i].style.display='none';}if(!m.can_manage_scripts){var sh=document.querySelector('a[href="/scripts"]');if(sh)sh.style.display='none';}}}).catch(function(){});
 </script>
 </body>
 </html>

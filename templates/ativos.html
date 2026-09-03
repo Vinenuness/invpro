@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ativos - AtivoFix</title>
+<link rel="icon" href="/static/logo-icon.png" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Inter,-apple-system,sans-serif;background:#0a0e1a;color:#e2e8f0;min-height:100vh}
+.top-bar{background:rgba(15,23,42,.95);border-bottom:1px solid rgba(51,65,85,.3);padding:14px 24px;display:flex;gap:16px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-icon{width:36px;height:36px;border-radius:10px;overflow:hidden;background:#fff}
+.brand-icon img{width:100%;height:100%;object-fit:cover}
+.brand-text{font-size:20px;font-weight:800;background:linear-gradient(135deg,#38bdf8,#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.brand-sub{font-size:11px;color:#64748b;font-weight:500}
+.menu-wrap{position:relative}
+.menu-btn{background:linear-gradient(135deg,#38bdf8,#818cf8);border:none;color:#fff;padding:10px 18px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit}
+.menu-dropdown{display:none;position:absolute;right:0;top:100%;margin-top:8px;background:rgba(15,23,42,.98);border:1px solid rgba(51,65,85,.4);border-radius:14px;padding:6px 0;min-width:200px;z-index:50;box-shadow:0 20px 40px rgba(0,0,0,.5)}
+.menu-dropdown.show{display:block}
+.menu-dropdown a{display:flex;align-items:center;gap:10px;padding:11px 18px;color:#e2e8f0;text-decoration:none;font-size:13px}
+.menu-dropdown a:hover{background:rgba(56,189,248,.1);color:#38bdf8}
+.menu-dropdown .menu-label{font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:1px;padding:10px 18px 4px;font-weight:600}
+.menu-dropdown hr{border:none;border-top:1px solid rgba(51,65,85,.3);margin:4px 0}
+.content{max-width:1100px;margin:0 auto;padding:24px}
+.page-title{font-size:22px;font-weight:700;color:#f8fafc;display:flex;align-items:center;gap:10px}
+.page-desc{font-size:13px;color:#64748b;margin:4px 0 20px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+select,input{padding:9px 12px;border-radius:9px;border:1px solid rgba(51,65,85,.4);background:rgba(15,23,42,.6);color:#e2e8f0;font-size:13px;font-family:inherit;outline:none}
+.btn{border:1px solid rgba(51,65,85,.4);background:rgba(15,23,42,.6);color:#cbd5e1;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-family:inherit}
+.btn:hover{background:rgba(56,189,248,.1);color:#38bdf8}
+.btn-primary{background:linear-gradient(135deg,#22c55e,#16a34a);border:none;color:#fff;font-weight:600}
+.btn-primary:hover{color:#fff;box-shadow:0 4px 12px rgba(34,197,94,.3)}
+.btn-danger{border-color:rgba(239,68,68,.3);color:#f87171}
+.btn-danger:hover{background:rgba(239,68,68,.1);color:#f87171}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.card{background:rgba(30,41,59,.5);border:1px solid rgba(51,65,85,.3);border-radius:14px;padding:16px;transition:all .2s}
+.card:hover{transform:translateY(-2px);border-color:rgba(56,189,248,.3)}
+.card-title{font-weight:700;color:#f8fafc;font-size:15px}
+.kind-badge{display:inline-block;padding:2px 9px;border-radius:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-left:6px}
+.kind-monitor{background:rgba(96,165,250,.15);color:#60a5fa}
+.kind-impressora{background:rgba(250,204,21,.15);color:#facc15}
+.kind-switch{background:rgba(52,211,153,.15);color:#34d399}
+.kind-roteador{background:rgba(129,140,248,.15);color:#a5b4fc}
+.kind-notebook,.kind-cpu,.kind-outro{background:rgba(148,163,184,.15);color:#94a3b8}
+.muted{color:#94a3b8;font-size:12px;line-height:1.5;margin-top:6px}
+.small{font-size:11px;color:#64748b;margin-top:4px}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.show{display:flex}
+.modal{background:rgba(15,23,42,.98);border:1px solid rgba(51,65,85,.4);border-radius:16px;padding:24px;width:90%;max-width:560px;max-height:88vh;overflow-y:auto}
+.modal h3{font-size:18px;color:#f1f5f9;margin-bottom:16px}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:10px 12px;border-radius:9px;border:1px solid rgba(51,65,85,.4);background:rgba(30,41,59,.5);color:#e2e8f0;font-size:13px;font-family:inherit;outline:none}
+.form-group textarea{min-height:60px;resize:vertical}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.status-pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:10px;font-weight:600}
+.status-ativo{background:rgba(34,197,94,.15);color:#22c55e}
+.status-manutencao{background:rgba(250,204,21,.15);color:#facc15}
+.status-inativo{background:rgba(239,68,68,.15);color:#f87171}
+.empty{text-align:center;padding:60px 20px;color:#64748b}
+</style>
+</head>
+<body>
+<div class="top-bar">
+<div class="brand">
+<div class="brand-icon"><img src="/static/logo-icon.png" alt="AtivoFix"></div>
+<div><div class="brand-text">AtivoFix</div><div class="brand-sub">Ativos</div></div>
+</div>
+<div class="menu-wrap">
+<button class="menu-btn" onclick="document.getElementById('menuDrop').classList.toggle('show')">☰ Menu</button>
+<div class="menu-dropdown" id="menuDrop">
+<div class="menu-label">NAVEGAÇÃO</div>
+<a href="/">Computadores</a>
+<a href="/chamados">Chamados</a>
+<a href="/dashboard">Dashboard</a>
+<a href="/unidades">Unidades</a>
+<a href="/ativos" style="color:#38bdf8">Ativos</a>
+<a href="/base-conhecimento">Base de Conhecimento</a>
+<hr>
+<a href="/logout" style="color:#f87171">Sair</a>
+</div>
+</div>
+</div>
+<div class="content">
+<div class="page-title">🖥️ Ativos</div>
+<div class="page-desc">Equipamentos de TI fora dos computadores (monitores, impressoras, switches, notebooks...) por unidade/local</div>
+<div class="toolbar">
+<input id="q" placeholder="Buscar por nome, marca, serial, patrimônio..." oninput="load()" style="flex:1;min-width:220px">
+<select id="fKind" onchange="load()">
+<option value="">Todos os tipos</option>
+<option value="monitor">Monitor</option>
+<option value="impressora">Impressora</option>
+<option value="switch">Switch</option>
+<option value="roteador">Roteador</option>
+<option value="notebook">Notebook</option>
+<option value="cpu">CPU</option>
+<option value="outro">Outro</option>
+</select>
+<select id="fUnit" onchange="load()"><option value="">Todas as unidades</option></select>
+<button class="btn btn-primary" id="btnNew" onclick="openModal()">+ Novo Ativo</button>
+</div>
+<div id="grid" class="grid"></div>
+</div>
+<div class="modal-overlay" id="modalBox"><div class="modal">
+<h3 id="modalTitle">Novo Ativo</h3>
+<div class="row2">
+<div class="form-group"><label>Tipo *</label><select id="fKind2">
+<option value="monitor">Monitor</option><option value="impressora">Impressora</option>
+<option value="switch">Switch</option><option value="roteador">Roteador</option>
+<option value="notebook">Notebook</option><option value="cpu">CPU/Desktop</option>
+<option value="outro">Outro</option></select></div>
+<div class="form-group"><label>Nome *</label><input id="fName" placeholder="Ex: Monitor Dell 24'"></div>
+</div>
+<div class="row2">
+<div class="form-group"><label>Marca</label><input id="fBrand" placeholder="Dell"></div>
+<div class="form-group"><label>Modelo</label><input id="fModel" placeholder="P2422H"></div>
+</div>
+<div class="row2">
+<div class="form-group"><label>Nº Série</label><input id="fSerial" placeholder="ABC123"></div>
+<div class="form-group"><label>Patrimônio</label><input id="fPatr" placeholder="EVO-0001"></div>
+</div>
+<div class="row2">
+<div class="form-group"><label>Unidade *</label><select id="fUnit2"></select></div>
+<div class="form-group"><label>Local</label><select id="fLoc2"><option value="">—</option></select></div>
+</div>
+<div class="row2">
+<div class="form-group"><label>Status</label><select id="fStatus">
+<option value="ativo">Ativo</option><option value="manutencao">Em manutenção</option><option value="inativo">Inativo</option>
+</select></div>
+</div>
+<div class="form-group"><label>Observações</label><textarea id="fNotes" placeholder="Detalhes..."></textarea></div>
+<div class="modal-actions">
+<button class="btn" onclick="hideModal()">Cancelar</button>
+<button class="btn btn-primary" onclick="save()">Salvar</button>
+</div>
+</div></div>
+<script>
+let assets=[],units=[],locs=[],editing=null,canWrite=false;
+const KIND={monitor:'Monitor',impressora:'Impressora',switch:'Switch',roteador:'Roteador',notebook:'Notebook',cpu:'CPU',outro:'Outro'};
+async function api(url,opts){const r=await fetch(url,opts);return r.json()}
+async function load(){
+  const q=document.getElementById('q').value.trim();
+  const kind=document.getElementById('fKind').value;
+  let url='/api/assets?';
+  if(q)url+='q='+encodeURIComponent(q)+'&';
+  if(kind)url+='kind='+kind;
+  assets=await api(url);
+  const g=document.getElementById('grid');
+  if(!assets.length){g.innerHTML='<div class="empty" style="grid-column:1/-1">Nenhum ativo encontrado.</div>';return}
+  g.innerHTML=assets.map(a=>{
+    const ac='<div class="card"><div><div class="card-title">'+esc(a.name)+'<span class="kind-badge kind-'+a.kind+'">'+(KIND[a.kind]||a.kind)+'</span></div></div>'+
+    '<div class="muted">'+(a.brand?esc(a.brand)+' ':'')+(a.model?esc(a.model):'')+(a.serial?' · S/N '+esc(a.serial):'')+(a.patrimonio?' · Patrimônio '+esc(a.patrimonio):'')+'</div>'+
+    '<div class="small">'+esc(a.unit_name||'Sem unidade')+(a.location_name?' • '+esc(a.location_name):'')+'</div>'+
+    '<div class="small">Status: <span class="status-pill status-'+a.status+'">'+a.status+'</span></div>'+
+    (a.notes?'<div class="small" style="margin-top:4px">'+esc(a.notes)+'</div>':'')+
+    (canWrite?'<div style="display:flex;gap:6px;margin-top:10px"><button class="btn" onclick="openModal('+a.asset_id+')">Editar</button><button class="btn btn-danger" onclick="del('+a.asset_id+')">Excluir</button></div>':'')+
+    '</div>';
+    return ac;
+  }).join('');
+}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+async function loadUnits(){
+  units=await api('/api/units');
+  const f=document.getElementById('fUnit');
+  f.innerHTML='<option value="">Todas as unidades</option>';
+  units.forEach(u=>f.innerHTML+='<option value="'+u.unit_id+'">'+esc(u.name)+'</option>');
+  const f2=document.getElementById('fUnit2');
+  f2.innerHTML='';
+  units.forEach(u=>f2.innerHTML+='<option value="'+u.unit_id+'">'+esc(u.name)+'</option>');
+}
+async function onUnit2Change(){const uid=document.getElementById('fUnit2').value;locs=await api('/api/locations?unit_id='+uid);const s=document.getElementById('fLoc2');s.innerHTML='<option value="">—</option>';locs.forEach(l=>s.innerHTML+='<option value="'+l.location_id+'">'+esc(l.name)+'</option>');}
+function openModal(id){
+  editing=assets.find(a=>a.asset_id===id)||null;
+  document.getElementById('modalTitle').textContent=editing?'Editar Ativo':'Novo Ativo';
+  document.getElementById('fKind2').value=editing?editing.kind:'monitor';
+  document.getElementById('fName').value=editing?editing.name:'';
+  document.getElementById('fBrand').value=editing?editing.brand||'':'';
+  document.getElementById('fModel').value=editing?editing.model||'':'';
+  document.getElementById('fSerial').value=editing?editing.serial||'':'';
+  document.getElementById('fPatr').value=editing?editing.patrimonio||'':'';
+  document.getElementById('fStatus').value=editing?editing.status:'ativo';
+  document.getElementById('fNotes').value=editing?editing.notes||'':'';
+  const f2=document.getElementById('fUnit2');
+  if(units.length){f2.value=editing&&editing.unit_id?editing.unit_id:units[0].unit_id;}else f2.innerHTML='<option value="">Nenhuma unidade — crie em Unidades</option>';
+  if(editing&&editing.unit_id)document.getElementById('fUnit2').value=editing.unit_id;
+  onUnit2Change().then(()=>{if(editing&&editing.location_id)document.getElementById('fLoc2').value=editing.location_id;});
+  document.getElementById('modalBox').classList.add('show');
+}
+function hideModal(){document.getElementById('modalBox').classList.remove('show')}
+async function save(){
+  const body={kind:document.getElementById('fKind2').value,name:document.getElementById('fName').value.trim(),
+    brand:document.getElementById('fBrand').value.trim(),model:document.getElementById('fModel').value.trim(),
+    serial:document.getElementById('fSerial').value.trim(),patrimonio:document.getElementById('fPatr').value.trim(),
+    unit_id:document.getElementById('fUnit2').value||null,location_id:document.getElementById('fLoc2').value||null,
+    status:document.getElementById('fStatus').value,notes:document.getElementById('fNotes').value.trim()};
+  if(!body.name){alert('Informe o nome');return}
+  const url=editing?'/api/assets/'+editing.asset_id:'/api/assets';
+  const method=editing?'POST':'POST';
+  const r=await api(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok){alert(r.error||'Erro');return}
+  hideModal();load();
+}
+async function del(id){if(!confirm('Excluir este ativo?'))return;const r=await api('/api/assets/'+id,{method:'DELETE'});if(!r.ok){alert(r.error);return}load()}
+async function init(){
+  const me=await api('/api/me');
+  canWrite=me.role!=='tech';
+  document.getElementById('btnNew').style.display=canWrite?'inline-block':'none';
+  document.getElementById('fUnit').onchange=load;
+  document.getElementById('fUnit2').onchange=onUnit2Change;
+  await loadUnits();
+  // filtra unidades permitidas no select de edição
+  if(me.units&&me.units.length&&me.role!=='master'){
+    const f2=document.getElementById('fUnit2');
+    f2.innerHTML='';me.units.forEach(u=>f2.innerHTML+='<option value="'+u.unit_id+'">'+esc(u.name)+'</option>');
+    const f1=document.getElementById('fUnit');
+    f1.innerHTML='<option value="">Todas as unidades</option>';me.units.forEach(u=>f1.innerHTML+='<option value="'+u.unit_id+'">'+esc(u.name)+'</option>');
+  }
+  load();
+}
+document.addEventListener('click',function(e){var m=document.getElementById('menuDrop');if(m&&!e.target.closest('.menu-wrap'))m.classList.remove('show')});
+init();
+</script>
+</body>
+</html>

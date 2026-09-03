@@ -2,6 +2,7 @@
 <html><head>
 <meta charset="UTF-8" />
 <title>Dashboard - AtivoFix</title>
+<link rel="icon" href="/static/logo-icon.png" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 body{font-family:Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:20px}
@@ -76,9 +77,11 @@ td{padding:10px 12px;border-bottom:1px solid #1e293b;font-size:13px}
 
 <div class="cards">
   <div class="card"><div class="card-label">Total PCs</div><div class="card-value blue" id="totalPCs">-</div></div>
-  <div class="card"><div class="card-label">Unidades</div><div class="card-value green" id="totalUnits">-</div></div>
-  <div class="card"><div class="card-label">Usuarios</div><div class="card-value purple" id="totalUsers">-</div></div>
-  <div class="card"><div class="card-label">Scripts</div><div class="card-value yellow" id="totalScripts">-</div></div>
+  <div class="card"><div class="card-label">PCs Offline</div><div class="card-value yellow" id="offlinePCs">-</div></div>
+  <div class="card"><div class="card-label">Chamados Abertos</div><div class="card-value green" id="openTickets">-</div></div>
+  <div class="card"><div class="card-label">Tempo Medio Resolucao (h)</div><div class="card-value purple" id="avgRes">-</div></div>
+  <div class="card"><div class="card-label">Unidades</div><div class="card-value" id="totalUnits">-</div></div>
+  <div class="card"><div class="card-label">Usuarios</div><div class="card-value" id="totalUsers">-</div></div>
 </div>
 
 <div class="charts">
@@ -104,9 +107,11 @@ async function loadDashboard() {
   var res=await fetch("/api/dashboard");
   var d=await res.json();
   document.getElementById("totalPCs").innerText=d.total_computers;
+  document.getElementById("offlinePCs").innerText=d.offline_pcs||0;
+  document.getElementById("openTickets").innerText=d.open_tickets||0;
+  document.getElementById("avgRes").innerText=d.avg_resolution_hours!=null?d.avg_resolution_hours:'-';
   document.getElementById("totalUnits").innerText=d.total_units;
   document.getElementById("totalUsers").innerText=d.total_users;
-  document.getElementById("totalScripts").innerText=d.total_scripts;
 
   var sel=document.getElementById("exportUnit");
   d.computers_per_unit.forEach(function(u){
@@ -170,6 +175,6 @@ async function loadDashboard() {
 }
 loadDashboard();
 </script><script>
-fetch('/api/me').then(function(r){return r.json()}).then(function(m){if(m.role==='tech'){var sel=document.querySelectorAll('a[href="/usuarios"],a[href="/empresas"],a[href="/estrutura"],a[href="/scripts"]');for(var i=0;i<sel.length;i++){sel[i].style.display='none';}}}).catch(function(){});
+fetch('/api/me').then(function(r){return r.json()}).then(function(m){if(m.role==='tech'){var sel=document.querySelectorAll('a[href="/usuarios"],a[href="/empresas"],a[href="/estrutura"]');for(var i=0;i<sel.length;i++){sel[i].style.display='none';}if(!m.can_manage_scripts){var sh=document.querySelector('a[href="/scripts"]');if(sh)sh.style.display='none';}}}).catch(function(){});
 </script>
 </body></html>

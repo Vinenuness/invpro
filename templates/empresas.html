@@ -1,4 +1,5 @@
-<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Empresas - AtivoFix</title><style>body{font-family:Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:20px}
+<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Empresas - AtivoFix</title>
+<link rel="icon" href="/static/logo-icon.png" /><style>body{font-family:Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:20px}
 h1{margin:0}
 .top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}
 .left{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
@@ -67,6 +68,6 @@ async function saveTenant(){
 }
 async function deleteTenant(id){if(!confirm("Excluir empresa?"))return;await fetch("/api/tenants/"+id,{method:"DELETE"});await load();}
 load();</script><script>
-fetch('/api/me').then(function(r){return r.json()}).then(function(m){if(m.role==='tech'){var sel=document.querySelectorAll('a[href="/usuarios"],a[href="/empresas"],a[href="/estrutura"],a[href="/scripts"]');for(var i=0;i<sel.length;i++){sel[i].style.display='none';}}}).catch(function(){});
+fetch('/api/me').then(function(r){return r.json()}).then(function(m){if(m.role==='tech'){var sel=document.querySelectorAll('a[href="/usuarios"],a[href="/empresas"],a[href="/estrutura"]');for(var i=0;i<sel.length;i++){sel[i].style.display='none';}if(!m.can_manage_scripts){var sh=document.querySelector('a[href="/scripts"]');if(sh)sh.style.display='none';}}}).catch(function(){});
 </script>
 </body></html>
